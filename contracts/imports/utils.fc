@@ -1,0 +1,68 @@
+;; =============== flags =============================
+
+const FLAGS::BOUNCEABLE = 0x18;
+const FLAGS::NON_BOUNCEABLE = 0x10;
+
+
+;; =============== send mods =============================
+
+const SEND_MODE::ORDINARY_MESSAGE = 0;
+const SEND_MODE::PAY_FEE_SEPARATELY = 1; ;; means that the sender wants to pay transfer fees separately
+const SEND_MODE::IGNORE_ERRORS = 2; ;; means that any errors arising while processing this message during the action phase should be ignored
+const SEND_MODE::DESTROY = 32; ;; current account must be destroyed if its resulting balance is zero
+const SEND_MODE::REMAINING_AMOUNT = 64; ;; is used for messages that carry all the remaining value of the inbound message in addition to the value initially indicated in the new message
+const SEND_MODE::REMAINING_BALANCE = 128; ;; carry all the remaining balance of the current smart contract instead of the value originally indicated in the message
+
+
+;; =============== general consts =============================
+
+const ONE_TON = 1000000000; ;; 1 TON
+
+;; errors
+const ERROR::INSUFFICIENT_BALANCE = 103;
+
+const ERROR::NOT_BOUNCEABLE_OP = 200;
+
+const ERROR::INSUFFICIENT_MSG_VALUE = 709;
+
+const ERROR::UNKNOWN_OP = 0xffff;
+
+
+;; =============== chains utils =============================
+
+;; chains id
+const WORKCHAIN = 0;
+const MASTERCHAIN = -1;
+
+;; errors
+const ERROR::NOT_WORKCHAIN = 333;
+const ERROR::NOT_MASTERCHAIN = 334;
+
+
+;; function utils
+() force_chain(slice addr) impure {
+  (int wc, _) = parse_std_addr(addr);
+  throw_unless(ERROR::NOT_WORKCHAIN, wc == WORKCHAIN);
+}
+
+
+;; =============== send msg utils =============================
+
+() send_msg(slice to_address, int amount, cell payload, int flags, int send_mode) impure inline {
+  int balance = pair_first(get_balance());
+  throw_unless(ERROR::INSUFFICIENT_BALANCE, balance >= amount);
+
+  int has_payload = ~ cell_null?(payload);
+
+  var msg = begin_cell()
+          .store_uint(flags, 6)
+          .store_slice(to_address)
+          .store_coins(amount)
+          .store_uint(has_payload ? 1 : 0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
+
+  if (has_payload) {
+    msg = msg.store_ref(payload);
+  }
+
+  send_raw_message(msg.end_cell(), send_mode);
+}

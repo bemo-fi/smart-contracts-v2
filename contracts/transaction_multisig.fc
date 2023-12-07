@@ -1,0 +1,208 @@
+;; =============== Transaction Multisig =====================
+
+#include "imports/stdlib.fc";
+#include "imports/utils.fc";
+#include "imports/nominator-proxy-utils.fc";
+
+#pragma version >=0.4.0;
+
+;; =============== consts =============================
+
+;; financial ops
+const FIN_OP::SEND_TON_FROM_FINANCIAL = 70;
+
+const MIN_TON_FOR_SEND_MSG = 10000000; ;; 0.01 TON
+
+;; errors
+const ERROR::SENDER_PUBLIC_KEY_NOT_FOUND = 31;
+const ERROR::INVALID_SENDER_SIGNATURE = 32;
+const ERROR::WALLET_ID_DOES_NOT_MATCH = 33;
+const ERROR::QUERY_HAS_ALREADY_BEEN_COMPLETED = 34;
+const ERROR::INVALID_QUERY_ID = 35;
+const ERROR::NOT_ALL_OWNERS_CONFIRMED = 36;
+const ERROR::PUBLIC_KEY_NOT_FOUND = 37;
+const ERROR::INVALID_SIGNATURE = 38;
+const ERROR::ALREADY_SIGNED = 39;
+
+;; global
+global int multisig_wallet_id;
+global int n;
+global int k;
+global cell owner_infos;
+global cell completed_queries;
+global slice financial_address;
+global cell temp_upgrade;
+global cell nominator_proxy_code;
+global cell nominator_pool_code;
+
+
+;; =============== storage =============================
+
+
+() load_data() impure inline {
+    slice ds = get_data().begin_parse();
+    multisig_wallet_id = ds~load_uint(32);
+    n = ds~load_uint(8);
+    k = ds~load_uint(8);
+    owner_infos = ds~load_dict();
+    completed_queries = ds~load_dict();
+    financial_address = ds~load_msg_addr();
+    nominator_proxy_code = ds~load_ref();
+    nominator_pool_code = ds~load_ref();
+}
+
+() save_data() impure inline {
+    set_data(begin_cell()
+    .store_uint(multisig_wallet_id, 32)
+    .store_uint(n, 8)
+    .store_uint(k, 8)
+    .store_dict(owner_infos)
+    .store_dict(completed_queries)
+    .store_slice(financial_address)
+    .store_ref(nominator_proxy_code)
+    .store_ref(nominator_pool_code)
+    .end_cell()
+    );
+}
+
+
+;; =============== utils =============================
+
+(int) check_signatures(cell public_keys, cell signatures, int hash) inline_ref {
+    int cnt = 0;
+    int cnt_bits = 0;
+    do {
+        slice cs = signatures.begin_parse();
+        slice signature = cs~load_bits(512);
+
+        int i = cs~load_uint(8);
+        signatures = cs~load_dict();
+
+        (slice public_key, var found?) = public_keys.udict_get?(8, i);
+        throw_unless(ERROR::PUBLIC_KEY_NOT_FOUND, found?);
+        throw_unless(ERROR::INVALID_SIGNATURE, check_signature(hash, signature, public_key.preload_uint(256)));
+
+        int mask = (1 << i);
+        throw_unless(ERROR::ALREADY_SIGNED, (cnt_bits & mask) == 0);
+        cnt_bits |= mask;
+        cnt += 1;
+    } until (cell_null?(signatures));
+    return cnt;
+}
+
+
+;; =============== recv =============================
+
+() recv_internal(slice in_msg) impure {
+    ;; do nothing for internal messages
+}
+
+() recv_external(slice in_msg) impure {
+    ;; empty message triggers init
+    if (slice_empty?(in_msg)) {
+        return ();
+    }
+
+    ;; Check root signature
+    slice root_signature = in_msg~load_bits(512);
+    int root_hash = slice_hash(in_msg);
+    int root_i = in_msg~load_uint(8);
+
+    load_data();
+
+    (slice public_key, var found?) = owner_infos.udict_get?(8, root_i);
+    throw_unless(ERROR::SENDER_PUBLIC_KEY_NOT_FOUND, found?);
+    throw_unless(ERROR::INVALID_SENDER_SIGNATURE, check_signature(root_hash, root_signature, public_key.preload_uint(256)));
+
+    cell signatures = in_msg~load_dict();
+
+    var hash = slice_hash(in_msg);
+    int query_wallet_id = in_msg~load_uint(32);
+    throw_unless(ERROR::WALLET_ID_DOES_NOT_MATCH, query_wallet_id == multisig_wallet_id);
+
+    int query_id = in_msg~load_uint(64);
+    (slice query, var found?) = completed_queries.udict_get?(64, query_id);
+    throw_if(ERROR::QUERY_HAS_ALREADY_BEEN_COMPLETED, found?);
+    var bound = (now() << 32);
+    throw_if(ERROR::INVALID_QUERY_ID, query_id < bound);
+
+    set_gas_limit(100000);
+
+    completed_queries~udict_set_builder(64, query_id, begin_cell().store_int(0, 1));
+    save_data();
+    commit();
+
+    int cnt = check_signatures(owner_infos, signatures, hash);
+    throw_unless(ERROR::NOT_ALL_OWNERS_CONFIRMED, cnt >= k);
+
+    while (in_msg.slice_refs()) {
+        slice msg_ref_body = (in_msg~load_ref()).begin_parse();
+        slice validator_addr = msg_ref_body~load_msg_addr();
+        var (validator_wc, validator_int_address) = parse_std_addr(validator_addr);
+        throw_unless(ERROR::NOT_MASTERCHAIN, validator_wc == MASTERCHAIN);
+        int validator_reward_share = msg_ref_body~load_uint(16);
+        int max_nominators_count = msg_ref_body~load_uint(16);
+        int min_validator_stake = msg_ref_body~load_coins();
+        int min_nominator_stake = msg_ref_body~load_coins();
+        int proxy_wallet_id = msg_ref_body~load_uint(32);
+        int amount = msg_ref_body~load_coins();
+
+        slice nominator_pool_address = calculate_nominator_pool_address(validator_int_address, validator_reward_share, max_nominators_count, min_validator_stake, min_nominator_stake, nominator_pool_code);
+        slice nominator_proxy_address = calculate_nominator_proxy_address(proxy_wallet_id, financial_address, nominator_pool_address, nominator_proxy_code);
+        send_msg(financial_address, MIN_TON_FOR_SEND_MSG, begin_cell().store_uint(FIN_OP::SEND_TON_FROM_FINANCIAL, 32).store_slice(nominator_proxy_address).store_coins(amount).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::IGNORE_ERRORS);
+    }
+
+    accept_message();
+    int need_save = 0;
+    bound -= (64 << 32); ;; clean up records expired more than 64 seconds ago
+    do {
+        var (completed_queries', i, query, f) = completed_queries.udict_delete_get_min(64);
+        f~touch();
+        if (f) {
+            f = (i < bound);
+        }
+        if (f) {
+            completed_queries = completed_queries';
+            need_save = -1;
+        }
+    } until (~ f);
+
+    if (need_save) {
+        save_data();
+    }
+}
+
+
+;; =============== getters =============================
+
+cell get_public_keys() method_id {
+    load_data();
+    return owner_infos;
+}
+
+(int, int) get_n_k() method_id {
+    load_data();
+    return (n, k);
+}
+
+(int, int, int, cell, cell, slice, cell, cell) get_full_data() method_id {
+    load_data();
+    return (
+        multisig_wallet_id,
+        n,
+        k,
+        owner_infos,
+        completed_queries,
+        financial_address,
+        nominator_proxy_code,
+        nominator_pool_code
+    );
+}
+
+(slice, slice) get_pool_proxy_addresses(slice validator_addr, int validator_reward_share, max_nominators_count, min_validator_stake, min_nominator_stake, wallet_id) method_id {
+    load_data();
+    var (_, validator_int_address) = parse_std_addr(validator_addr);
+    slice nominator_pool_address = calculate_nominator_pool_address(validator_int_address, validator_reward_share, max_nominators_count, min_validator_stake, min_nominator_stake, nominator_pool_code);
+    slice nominator_proxy_address = calculate_nominator_proxy_address(wallet_id, financial_address, nominator_pool_address, nominator_proxy_code);
+    return (nominator_pool_address, nominator_proxy_address);
+}

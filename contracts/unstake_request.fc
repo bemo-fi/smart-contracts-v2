@@ -1,0 +1,133 @@
+;; =============== Unstake Request =============================
+
+#include "imports/stdlib.fc";
+#include "imports/utils.fc";
+
+#pragma version >=0.4.0;
+
+;; =============== consts =============================
+
+const UNSTAKE_FEE = 25000000; ;; 0.025 TON
+
+;; ops
+const OP::DEPLOY_UNSTAKE_REQUEST = 100;
+const OP::RETURN_UNSTAKE_REQUEST = 101;
+
+;; fin ops
+const FIN_OP::UNSTAKE = 10;
+
+;; errors
+const ERROR::NOT_ALLOWED = 50;
+const ERROR::UNLOCK_TIMESTAMP_HAS_NOT_EXPIRED_YET = 51;
+
+;; global
+global int index;
+global slice financial_address;
+global slice owner_address;
+global int ton_amount;
+global int jetton_amount;
+global int unlock_timestamp;
+
+
+;; =============== storage =============================
+
+() load_data() impure {
+    slice ds = get_data().begin_parse();
+    index = ds~load_int(64);
+    financial_address = ds~load_msg_addr();
+    var init? = ds.slice_bits() > 0;
+    owner_address = init? ? ds~load_msg_addr() : null();
+    ton_amount = init? ? ds~load_coins() : 0;
+    jetton_amount = init? ? ds~load_coins() : 0;
+    unlock_timestamp = init? ? ds~load_uint(32) : 0;
+}
+
+() save_data() impure {
+    set_data(begin_cell()
+            .store_int(index, 64)
+            .store_slice(financial_address)
+            .store_slice(owner_address)
+            .store_coins(ton_amount)
+            .store_coins(jetton_amount)
+            .store_uint(unlock_timestamp, 32)
+            .end_cell()
+    );
+}
+
+
+;; =============== recv =============================
+
+() unstake(int my_balance, int external?) impure {
+    throw_unless(ERROR::NOT_ALLOWED, unlock_timestamp != 0);
+    throw_unless(ERROR::INSUFFICIENT_BALANCE, my_balance >= UNSTAKE_FEE);
+    throw_unless(ERROR::UNLOCK_TIMESTAMP_HAS_NOT_EXPIRED_YET, unlock_timestamp <= now());
+
+    if (external?){
+        accept_message();
+    }
+
+    var payload = begin_cell()
+    .store_uint(FIN_OP::UNSTAKE, 32)
+    .store_int(index, 64)
+    .store_slice(owner_address)
+    .store_coins(ton_amount)
+    .store_coins(jetton_amount)
+    .end_cell();
+
+    unlock_timestamp = 0;
+
+    send_msg(financial_address, 0, payload, FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_BALANCE + SEND_MODE::IGNORE_ERRORS);
+}
+
+
+;; =============== recv =============================
+
+() recv_external(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    load_data();
+    unstake(my_balance, true);
+    save_data();
+    return ();
+}
+
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+
+    if (flags & 1) { ;; ignore all bounced messages
+        return ();
+    }
+    slice sender_address = cs~load_msg_addr();
+
+    load_data();
+
+    if (equal_slices(financial_address, sender_address)){
+        int op = in_msg_body~load_uint(32);
+        throw_unless(ERROR::UNKNOWN_OP, (op == OP::DEPLOY_UNSTAKE_REQUEST) | (op == OP::RETURN_UNSTAKE_REQUEST));
+        if (op == OP::DEPLOY_UNSTAKE_REQUEST) {
+            owner_address = in_msg_body~load_msg_addr();
+            ton_amount = in_msg_body~load_coins();
+            jetton_amount = in_msg_body~load_coins();
+        }
+        unlock_timestamp = in_msg_body~load_uint(32);
+    } else {
+        unstake(my_balance, false);
+    }
+
+    save_data();
+    return ();
+}
+
+;; =============== getters =============================
+
+(_) get_unstake_data() method_id {
+    load_data();
+
+    return (
+            index,
+            financial_address,
+            owner_address,
+            ton_amount,
+            jetton_amount,
+            unlock_timestamp
+    );
+}
