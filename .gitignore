@@ -1,9 +1,0 @@
-node_modules
-temp
-build
-.env
-.idea
-/python/
-/yarn.lock
-/yarn-error.log
-/package-lock.json

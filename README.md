@@ -1,76 +1,17 @@
-# TON project
-
-Starter template for a new TON project - FunC contracts, unit tests, compilation and deployment scripts.
-
-## Layout
-
--   `contracts` - contains the source code of all the smart contracts of the project and their dependencies.
--   `wrappers` - contains the wrapper classes (implementing `Contract` from ton-core) for the contracts, including any [de]serialization primitives and compilation functions.
--   `tests` - tests for the contracts. Would typically use the wrappers.
--   `scripts` - contains scripts used by the project, mainly the deployment scripts.   
-
-## Repo contents / tech stack
-1. Compiling FunC - [https://github.com/ton-community/func-js](https://github.com/ton-community/func-js)
-2. Testing TON smart contracts - [https://github.com/ton-community/sandbox](https://github.com/ton-community/sandbox)
-3. Deployment of contracts is supported with [TON Connect 2](https://github.com/ton-connect/), [Tonhub wallet](https://tonhub.com/), using mnemonics, or via a direct `ton://` deeplink
-
-## How to use
-* Run `npm create ton@latest`
-
-### Building a contract
-1. Interactively
-   1. Run `yarn blueprint build`
-   2. Choose the contract you'd like to build
-1. Non-interactively
-   1. Run `yarn blueprint build <CONTRACT>`
-   2. example: `yarn blueprint build pingpong`
-
-### Deploying a contract
-1. Interactively
-   1. Run `yarn blueprint run`
-   2. Choose the contract you'd like to deploy
-   3. Choose whether you're deploying on mainnet or testnet
-   4. Choose how to deploy:
-      1. With a TON Connect compatible wallet
-      2. A `ton://` deep link / QR code
-      3. Tonhub wallet
-      4. Mnemonic
-   5. Deploy the contract
-2. Non-interactively
-   1. Run `yarn blueprint run <CONTRACT> --<NETWORK> --<DEPLOY_METHOD>`
-   2. example: `yarn blueprint run pingpong --mainnet --tonconnect`
-
-### Testing
-1. Run `yarn test`
-
-## Adding your own contract
-1. Run `yarn blueprint create <CONTRACT>`
-2. example: `yarn blueprint create MyContract`
-
-* Write code
-  * FunC contracts are located in `contracts/*.fc`
-    * Standalone root contracts are located in `contracts/*.fc`
-    * Shared imports (when breaking code to multiple files) are in `contracts/imports/*.fc`
-  * Tests in TypeScript are located in `test/*.spec.ts`
-  * Wrapper classes for interacting with the contract are located in `wrappers/*.ts`
-  * Any scripts (including deployers) are located in `scripts/*.ts`
-
-* Build
-  * Builder configs are located in `wrappers/*.compile.ts`
-  * In the root repo dir, run in terminal `yarn blueprint build`
-  * Compilation errors will appear on screen, if applicable
-  * Resulting build artifacts include:
-    * `build/*.compiled.json` - the binary code cell of the compiled contract (for deployment). Saved in a hex format within a json file to support webapp imports
-
-* Test
-  * In the root repo dir, run in terminal `yarn test`
-  * Don't forget to build (or rebuild) before running tests
-  * Tests are running inside Node.js by running TVM in web-assembly using [sandbox](https://github.com/ton-community/sandbox)
-
-* Deploy
-  * Run `yarn blueprint run <deployscript>`
-  * Contracts will be rebuilt on each execution
-  * Follow the on-screen instructions of the deploy script
+# smart-contract
+![image](https://github.com/SergeyLepesev/smart-contract/assets/30021495/aee9057d-0df6-4020-9b18-18bb27dc6464)
   
-# License
-MIT
+
+# Deposit and withdrawal. 
+![image](https://github.com/SergeyLepesev/smart-contract/assets/30021495/7c24175b-fedf-4fe3-8da7-ef7150ddc669) 
+    A user sends Ton to our protocol. It calculates the current rate, and uses it to send stTon to the user's wallet. It is important to note, this is the only possible way to issue stTon. 
+To withdraw the tokens must be burned, then the financial s-c will create a request for withdrawal, and will record what amount should be blocked on it for further withdrawal. The requester has a lock of 36-72 hours, depends on the epoch. All this can be done decentralized without us, we can provide instructions.
+
+# Sending funds for validation.
+![image](https://github.com/SergeyLepesev/smart-contract/assets/30021495/fea02d92-e956-48de-8c63-361242380e53)
+    Our oracle checks the current state of the rounds, and an hour before the validation starts, creates a request to transfer funds from financial s-c to nominaror-pool. For this purpose, we have developed our own transaction multisig s-c, the peculiarity of which is that funds can only be sent to a certain type of contract, namely nominator-pool. Multisig will not be able to request sending assets to any other type of smart contract, including wallet. In case even all keys are lost, an attacker will not gain access to your assets. 
+After the request is sent to the financial s-c. That in turn sends the assets to the nominator-proxy. Nominator-proxy participates in the pool as a nominator.
+
+# Validation withdrawals.
+![image](https://github.com/SergeyLepesev/smart-contract/assets/30021495/966089aa-793c-4d17-b0e6-7691f72c61b7)
+    You can send a withdrawal request 10 hours after the nominator-proxy has sent the money for validation. This is enough time for the round to start and finish. Anyone can request a withdrawal. This is done for decentralization, so the assets cannot be locked to the nominator. When the round is over and the assets return to the pool, Mytonctrl software will make a withdrawal to the nominator-proxy. It will in turn send the assets to the financial s-c along with the validation reward data. The financial s-c will change the internal Ton pools, and then the rate will increase.
