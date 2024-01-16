@@ -1449,7 +1449,7 @@ describe('Financial', () => {
             to: unstakeRequestAddress,
             body: beginCell()
                 .storeUint(FinancialOpcodes.returnUnstakeRequest,32)
-                .storeInt(currentTimestamp, 32)
+                .storeUint(currentTimestamp + lockupPeriod / 2, 32)
                 .endCell(),
             success: true
         })
@@ -1470,7 +1470,7 @@ describe('Financial', () => {
         expect(unstakeRequestData.ownerAddress).toBe(anyone.address.toString())
         expect(unstakeRequestData.withdrawTonAmount).toBe(withdrawTonAmount)
         expect(unstakeRequestData.withdrawJettonAmount).toBe(withdrawJettonAmount)
-        expect(unstakeRequestData.unlockTimestamp).toBe(currentTimestamp)
+        expect(unstakeRequestData.unlockTimestamp).toBe(currentTimestamp + lockupPeriod / 2)
     });
 
     it('[op unstake] should send ton to user', async () => {

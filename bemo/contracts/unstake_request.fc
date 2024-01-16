@@ -13,7 +13,7 @@ const UNSTAKE_FEE = 25000000; ;; 0.025 TON
 const OP::DEPLOY_UNSTAKE_REQUEST = 100;
 const OP::RETURN_UNSTAKE_REQUEST = 101;
 
-;; fin ops
+;; financial ops
 const FIN_OP::UNSTAKE = 10;
 
 ;; errors
@@ -44,13 +44,13 @@ global int unlock_timestamp;
 
 () save_data() impure {
     set_data(begin_cell()
-            .store_int(index, 64)
-            .store_slice(financial_address)
-            .store_slice(owner_address)
-            .store_coins(ton_amount)
-            .store_coins(jetton_amount)
-            .store_uint(unlock_timestamp, 32)
-            .end_cell()
+    .store_int(index, 64)
+    .store_slice(financial_address)
+    .store_slice(owner_address)
+    .store_coins(ton_amount)
+    .store_coins(jetton_amount)
+    .store_uint(unlock_timestamp, 32)
+    .end_cell()
     );
 }
 
@@ -123,11 +123,11 @@ global int unlock_timestamp;
     load_data();
 
     return (
-            index,
-            financial_address,
-            owner_address,
-            ton_amount,
-            jetton_amount,
-            unlock_timestamp
+        index,
+        financial_address,
+        owner_address,
+        ton_amount,
+        jetton_amount,
+        unlock_timestamp
     );
 }

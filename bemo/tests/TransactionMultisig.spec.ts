@@ -3,10 +3,12 @@ import {beginCell, Cell, toNano} from 'ton-core';
 import {TransactionMultisig, TransactionMultisigErrors} from '../wrappers/TransactionMultisig';
 import '@ton-community/test-utils';
 import {compile} from '@ton-community/blueprint';
-import {getOrderByPayloads} from "../wrappers/utils/MultisigOrder";
-import {getSendTonFromFinancialPayload} from "../wrappers/utils/TransactionMultisigUtils";
+import {getOrderByPayload, getOrderByPayloads} from "../wrappers/utils/MultisigOrder";
+import {getReturnTonPayload, getSendTonFromFinancialPayload} from "../wrappers/utils/TransactionMultisigUtils";
 import {NominatorPoolCodeBase64} from "../wrappers/NominatorPool";
 import {NominatorProxy} from "../wrappers/NominatorProxy";
+import {KeyPair} from "ton-crypto/dist/primitives/nacl";
+import {mnemonicNew, mnemonicToPrivateKey} from "ton-crypto";
 
 describe('TransactionMultisig', () => {
 
@@ -15,12 +17,18 @@ describe('TransactionMultisig', () => {
     let proxyCode: Cell
     let poolCode: Cell
     let financial: SandboxContract<TreasuryContract>
+    let keypairs: KeyPair[]
 
     async function deployMultisig(n: number, walletId: number = 0): Promise<SandboxContract<TransactionMultisig>> {
+        let mnemonics = []
         let publicKeys = []
+        keypairs = []
         for (let i = 0; i < n; i++) {
-            const wallet = await blockchain.treasury('owner' + i.toString())
-            publicKeys.push(wallet.keypair.publicKey)
+            const mnemonic = await mnemonicNew()
+            mnemonics.push(mnemonic)
+            const keypair = await mnemonicToPrivateKey(mnemonic)
+            keypairs.push(keypair)
+            publicKeys.push(keypair.publicKey)
         }
 
         financial = await blockchain.treasury('financial')
@@ -63,12 +71,12 @@ describe('TransactionMultisig', () => {
         const sendTonPayload = getSendTonFromFinancialPayload(destination.address.toString(), 1, 1, 1, 1, 1)
         const sendTonOrder = getOrderByPayloads([sendTonPayload])
         for (let i = 1; i < n; i++) {
-            const wallet = await blockchain.treasury('owner' + i.toString())
-            sendTonOrder.sign(i, wallet.keypair.secretKey)
+            sendTonOrder.sign(i, keypairs[i].secretKey)
         }
-        const nonOwner = await blockchain.treasury('nonOwner')
+        const nonOwnerMnemonic = await mnemonicNew()
+        const nonOwnerKeyPair = await mnemonicToPrivateKey(nonOwnerMnemonic)
         try {
-            await multisig.sendOrder(sendTonOrder, nonOwner.keypair.secretKey, 0)
+            await multisig.sendOrder(sendTonOrder, nonOwnerKeyPair.secretKey, 0)
         } catch (e) {
         }
     })
@@ -80,13 +88,12 @@ describe('TransactionMultisig', () => {
         const sendTonPayload = getSendTonFromFinancialPayload(destination.address.toString(), 1, 1, 1, 1, 1)
         const sendTonOrder = getOrderByPayloads([sendTonPayload])
         for (let i = 1; i < n; i++) {
-            const wallet = await blockchain.treasury('owner' + i.toString())
-            sendTonOrder.sign(i, wallet.keypair.secretKey)
+            sendTonOrder.sign(i, keypairs[i].secretKey)
         }
-        const nonOwner = await blockchain.treasury('nonOwner')
-        sendTonOrder.sign(2, nonOwner.keypair.secretKey)
-        const owner0 = await blockchain.treasury('owner0')
-        const result = await multisig.sendOrder(sendTonOrder, owner0.keypair.secretKey, 0)
+        const nonOwnerMnemonic = await mnemonicNew()
+        const nonOwnerKeyPair = await mnemonicToPrivateKey(nonOwnerMnemonic)
+        sendTonOrder.sign(2, nonOwnerKeyPair.secretKey)
+        const result = await multisig.sendOrder(sendTonOrder, keypairs[0].secretKey, 0)
         expect(result.transactions.length).toBe(1)
         expect(result.transactions).toHaveTransaction({
             to: multisig.address,
@@ -101,11 +108,9 @@ describe('TransactionMultisig', () => {
         const sendTonPayload = getSendTonFromFinancialPayload(destination.address.toString(), 1, 1, 1, 1, 1)
         const sendTonOrder = getOrderByPayloads([sendTonPayload])
         for (let i = 1; i < n; i++) {
-            const wallet = await blockchain.treasury('owner' + i.toString())
-            sendTonOrder.sign(i, wallet.keypair.secretKey)
+            sendTonOrder.sign(i, keypairs[i].secretKey)
         }
-        const owner0 = await blockchain.treasury('owner0')
-        const result = await multisig.sendOrder(sendTonOrder, owner0.keypair.secretKey, 0)
+        const result = await multisig.sendOrder(sendTonOrder, keypairs[0].secretKey, 0)
         expect(result.transactions.length).toBe(1)
         expect(result.transactions).toHaveTransaction({
             to: multisig.address,
@@ -120,11 +125,9 @@ describe('TransactionMultisig', () => {
         const sendTonPayload = getSendTonFromFinancialPayload(destination.address.toString(), 1, 1, 1, 1, 1)
         const sendTonOrder = getOrderByPayloads([sendTonPayload])
         for (let i = 0; i < n; i++) {
-            const wallet = await blockchain.treasury('owner' + i.toString())
-            sendTonOrder.sign(i, wallet.keypair.secretKey)
+            sendTonOrder.sign(i, keypairs[i].secretKey)
         }
-        const owner0 = await blockchain.treasury('owner0')
-        const result = await multisig.sendWrongOrder(sendTonOrder, owner0.keypair.secretKey, 0)
+        const result = await multisig.sendWrongOrder(sendTonOrder, keypairs[0].secretKey, 0)
         expect(result.transactions.length).toBe(1)
         expect(result.transactions).toHaveTransaction({
             to: multisig.address,
@@ -140,12 +143,26 @@ describe('TransactionMultisig', () => {
         const sendTonPayload = getSendTonFromFinancialPayload(destination.address.toString(), 1, 1, 1, 1, 1)
         const sendTonOrder = getOrderByPayloads([sendTonPayload], 0, -7200)
         for (let i = 0; i < n; i++) {
-            const wallet = await blockchain.treasury('owner' + i.toString())
-            sendTonOrder.sign(i, wallet.keypair.secretKey)
+            sendTonOrder.sign(i, keypairs[i].secretKey)
         }
-        const owner0 = await blockchain.treasury('owner0')
         try {
-            await multisig.sendOrder(sendTonOrder, owner0.keypair.secretKey, 0)
+            await multisig.sendOrder(sendTonOrder, keypairs[0].secretKey, 0)
+        } catch (e) {
+        }
+    })
+
+    //you need to manually check the error code, 35
+    it('should throw an error if query id is too large', async () => {
+        const n = 3
+        const multisig = await deployMultisig(n)
+        const destination = await blockchain.treasury('destination')
+        const sendTonPayload = getSendTonFromFinancialPayload(destination.address.toString(), 1, 1, 1, 1, 1)
+        const sendTonOrder = getOrderByPayloads([sendTonPayload], 0, 70*60*60)
+        for (let i = 0; i < n; i++) {
+            sendTonOrder.sign(i, keypairs[i].secretKey)
+        }
+        try {
+            await multisig.sendOrder(sendTonOrder, keypairs[0].secretKey, 0)
         } catch (e) {
         }
     })
@@ -157,11 +174,9 @@ describe('TransactionMultisig', () => {
         const sendTonPayload = getSendTonFromFinancialPayload(destination.address.toString(), 1, 1, 1, 1, 1)
         const sendTonOrder = getOrderByPayloads([sendTonPayload])
         for (let i = 0; i < n; i++) {
-            const wallet = await blockchain.treasury('owner' + i.toString())
-            sendTonOrder.sign(i, wallet.keypair.secretKey)
+            sendTonOrder.sign(i, keypairs[i].secretKey)
         }
-        const owner0 = await blockchain.treasury('owner0')
-        const result = await multisig.sendOrder(sendTonOrder, owner0.keypair.secretKey, 0)
+        const result = await multisig.sendOrder(sendTonOrder, keypairs[0].secretKey, 0)
         expect(result.transactions.length).toBe(1)
         expect(result.transactions).toHaveTransaction({
             to: multisig.address,
@@ -177,13 +192,11 @@ describe('TransactionMultisig', () => {
         const sendTonPayload = getSendTonFromFinancialPayload(destination.address.toString(), 1, 1, 1, 1, 1)
         const sendTonOrder = getOrderByPayloads([sendTonPayload])
         for (let i = 0; i < n; i++) {
-            const wallet = await blockchain.treasury('owner' + i.toString())
-            sendTonOrder.sign(i, wallet.keypair.secretKey)
+            sendTonOrder.sign(i, keypairs[i].secretKey)
         }
-        const owner0 = await blockchain.treasury('owner0')
-        await multisig.sendOrder(sendTonOrder, owner0.keypair.secretKey, 0)
+        await multisig.sendOrder(sendTonOrder, keypairs[0].secretKey, 0)
         try {
-            await multisig.sendOrder(sendTonOrder, owner0.keypair.secretKey, 0)
+            await multisig.sendOrder(sendTonOrder, keypairs[0].secretKey, 0)
         } catch (e) {
         }
     })
@@ -284,11 +297,10 @@ describe('TransactionMultisig', () => {
 
         const sendTonOrder = getOrderByPayloads([sendTonPayload1, sendTonPayload2, sendTonPayload3])
         for (let i = 0; i < n; i++) {
-            const wallet = await blockchain.treasury('owner' + i.toString())
-            sendTonOrder.sign(i, wallet.keypair.secretKey)
+            sendTonOrder.sign(i, keypairs[i].secretKey)
         }
-        const owner0 = await blockchain.treasury('owner0')
-        const result1 = await multisig.sendOrder(sendTonOrder, owner0.keypair.secretKey, 0)
+
+        const result1 = await multisig.sendOrder(sendTonOrder, keypairs[0].secretKey, 0)
 
         const body1 = beginCell().storeUint(70, 32).storeAddress(proxy1.address).storeCoins(toNano(10000)).endCell()
         const body2 = beginCell().storeUint(70, 32).storeAddress(proxy2.address).storeCoins(toNano(10000)).endCell()
@@ -321,7 +333,38 @@ describe('TransactionMultisig', () => {
 
         //you need to manually check the error code, 34
         try {
-            await multisig.sendOrder(sendTonOrder, owner0.keypair.secretKey, 0)
-        } catch (e) {}
+            await multisig.sendOrder(sendTonOrder, keypairs[0].secretKey, 0)
+        } catch (e) {
+        }
+    })
+
+    it('should transfer remaining balance to destination', async () => {
+        const n = 3
+        const multisig = await deployMultisig(n)
+
+        const anyone = await blockchain.treasury('anyone')
+
+        const returnTonPayload = getReturnTonPayload(anyone.address.toString())
+        const returnTonOrder = getOrderByPayload(returnTonPayload)
+
+        for (let i = 0; i < n; i++) {
+            returnTonOrder.sign(i, keypairs[i].secretKey)
+        }
+
+        const result = await multisig.sendOrder(returnTonOrder, keypairs[0].secretKey, 0)
+        expect(result.transactions.length).toBe(2)
+        expect(result.transactions).toHaveTransaction({
+            to: multisig.address,
+            exitCode: TransactionMultisigErrors.noErrors
+        })
+
+        expect(result.transactions).toHaveTransaction({
+            from: multisig.address,
+            to: anyone.address,
+            value: (x) =>{
+                return x! >= toNano("4.7") && x! <= toNano("5")
+            },
+            exitCode: TransactionMultisigErrors.noErrors
+        })
     })
 });

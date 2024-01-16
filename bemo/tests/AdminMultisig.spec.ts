@@ -16,7 +16,7 @@ import {
     getChangeContentPayload,
     getChangeTransactionMultisigPayload,
     getSendCommissionPayload,
-    getChangeFinancialCodePayload, getAdminMultisigInternalPayload, getTransferJettonPayload
+    getChangeFinancialCodePayload, getAdminMultisigInternalPayload, getTransferJettonPayload, getReturnTonPayload
 } from "../wrappers/utils/AdminMultisigUtils";
 import {buildJettonOnchainMetadata} from "../wrappers/utils/ContentUtils";
 import now = jest.now;
@@ -221,12 +221,59 @@ describe('AdminMultisig', () => {
 
     })
 
+    it('[internal] should throw an error if backdated', async () => {
+        const n = 3
+        const multisig = await deployMultisig(n)
+        const owner0 = await blockchain.treasury('owner0')
+        const tonAmount = toNano('0.1')
+        const newAdmin = await blockchain.treasury('newAdmin')
+        const changeAdminMultisigPayload = getChangeAdminMultisigPayload(newAdmin.address.toString())
+        const changeAdminMultisigOrder = getAdminMultisigInternalPayload(changeAdminMultisigPayload, 0, -7200)
+        const result = await multisig.sendInternal(owner0.getSender(), tonAmount, changeAdminMultisigOrder)
+        expect(result.transactions.length).toBe(3)
+
+        expect(result.transactions).toHaveTransaction({
+            from: owner0.address,
+            to: multisig.address,
+            value: tonAmount,
+            success: false,
+            exitCode: AdminMultisigErrors.invalidQueryId
+        })
+
+        const temp = await multisig.getTempConfig()
+        expect(temp.adminMultisigAddress).toBe(undefined)
+    })
+
+    it('[internal] should throw an error if query id is too large', async () => {
+        const n = 3
+        const multisig = await deployMultisig(n)
+        const owner0 = await blockchain.treasury('owner0')
+        const tonAmount = toNano('0.1')
+        const newAdmin = await blockchain.treasury('newAdmin')
+        const changeAdminMultisigPayload = getChangeAdminMultisigPayload(newAdmin.address.toString())
+        const changeAdminMultisigOrder = getAdminMultisigInternalPayload(changeAdminMultisigPayload, 0, 60 * 60 * 70)
+        const result = await multisig.sendInternal(owner0.getSender(), tonAmount, changeAdminMultisigOrder)
+        expect(result.transactions.length).toBe(3)
+
+        expect(result.transactions).toHaveTransaction({
+            from: owner0.address,
+            to: multisig.address,
+            value: tonAmount,
+            success: false,
+            exitCode: AdminMultisigErrors.invalidQueryId
+        })
+
+        const temp = await multisig.getTempConfig()
+        expect(temp.adminMultisigAddress).toBe(undefined)
+    })
+
     it('[internal] should change admin address and send to financial', async () => {
         const n = 3
         const newAdmin = await blockchain.treasury('newAdmin')
+
         const multisig = await deployMultisig(n, {
             adminMultisigAddress: newAdmin.address.toString(),
-            changingAdminMultisigTime: Math.floor(now() / 1000) - 60 * 60 * 50 // now - 50 hours
+            changingAdminMultisigTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
         const changeAdminMultisigPayload = getChangeAdminMultisigPayload(newAdmin.address.toString())
         const changeAdminMultisigMsg = getAdminMultisigInternalPayload(changeAdminMultisigPayload)
@@ -361,6 +408,7 @@ describe('AdminMultisig', () => {
 
     it('[internal] should decrease flood for owner', async () => {
         const n = 3
+        blockchain.now = Math.floor(now() / 1000)
         const multisig = await deployMultisig(n)
         const newAdmin = await blockchain.treasury('newAdmin')
         const changeAdminMultisigPayload = getChangeAdminMultisigPayload(newAdmin.address.toString())
@@ -372,8 +420,8 @@ describe('AdminMultisig', () => {
         let owner0Flood = await multisig.getOwnerFlood(owner0.address.toString())
         expect(owner0Flood.flood).toBe(initOwner0Flood.flood + 1)
         initOwner0Flood = owner0Flood
-        blockchain.now = Math.floor(now() / 1000) + 60 * 60 * 70
-        const changeAdminMultisigMsg2 = getAdminMultisigInternalPayload(changeAdminMultisigPayload, 0, Math.floor(now() / 1000) + 60 * 60 * 70)
+        blockchain.now = Math.floor(now() / 1000) + 60 * 60 * 20
+        const changeAdminMultisigMsg2 = getAdminMultisigInternalPayload(changeAdminMultisigPayload, 0, blockchain.now - Math.floor(now() / 1000) + 60 * 60 * 20)
         const owner1 = await blockchain.treasury('owner1')
         const result = await multisig.sendInternal(owner1.getSender(), tonAmount, changeAdminMultisigMsg2)
 
@@ -477,6 +525,25 @@ describe('AdminMultisig', () => {
         for (let i = 0; i < n; i++) {
             changeAdminMultisigOrder.sign(i, keypairs[i].secretKey)
         }
+        // 35
+        try {
+            await multisig.sendOrder(changeAdminMultisigOrder, keypairs[0].secretKey, 0)
+        } catch (e) {}
+
+        const temp = await multisig.getTempConfig()
+        expect(temp.adminMultisigAddress).toBe(undefined)
+    })
+
+    it('should throw an error if query id is too large', async () => {
+        const n = 3
+        const multisig = await deployMultisig(n)
+        const newAdmin = await blockchain.treasury('newAdmin')
+        const changeAdminMultisigPayload = getChangeAdminMultisigPayload(newAdmin.address.toString())
+        const changeAdminMultisigOrder = getOrderByPayload(changeAdminMultisigPayload, 0, 60 * 60 * 70)
+        for (let i = 0; i < n; i++) {
+            changeAdminMultisigOrder.sign(i, keypairs[i].secretKey)
+        }
+        // 35
         try {
             await multisig.sendOrder(changeAdminMultisigOrder, keypairs[0].secretKey, 0)
         } catch (e) {}
@@ -557,7 +624,7 @@ describe('AdminMultisig', () => {
         const newAdmin = await blockchain.treasury('newAdmin')
         const multisig = await deployMultisig(n, {
             adminMultisigAddress: newAdmin.address.toString(),
-            changingAdminMultisigTime: Math.floor(now() / 1000) - 60 * 60 * 50 // now - 50 hours
+            changingAdminMultisigTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
         const initialTemp = await multisig.getTempConfig()
         expect(initialTemp.adminMultisigAddress).toBe(newAdmin.address.toString())
@@ -670,7 +737,7 @@ describe('AdminMultisig', () => {
         const newAdmin = await blockchain.treasury('newAdmin')
         const multisig = await deployMultisig(n, {
             transactionMultisigAddress: newAdmin.address.toString(),
-            changingTransactionMultisigTime: Math.floor(now() / 1000) - 60 * 60 * 50 // now - 50 hours
+            changingTransactionMultisigTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
         const initialTemp = await multisig.getTempConfig()
         expect(initialTemp.transactionMultisigAddress).toBe(newAdmin.address.toString())
@@ -805,7 +872,7 @@ describe('AdminMultisig', () => {
         }
         const multisig = await deployMultisig(n, {
             jettonContent: content,
-            changingContentTime: Math.floor(now() / 1000) - 60 * 60 * 50 // now - 50 hours
+            changingContentTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
 
         const initialTemp = await multisig.getTempConfig()
@@ -964,7 +1031,7 @@ describe('AdminMultisig', () => {
         const commissionFactor = 0
         const multisig = await deployMultisig(n, {
             commissionFactor,
-            changingCommissionTime: Math.floor(now() / 1000) - 60 * 60 * 50 // now - 50 hours
+            changingCommissionTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
 
         const initialTemp = await multisig.getTempConfig()
@@ -1081,7 +1148,7 @@ describe('AdminMultisig', () => {
         const commissionWallet = await blockchain.treasury('newCommissionWallet')
         const multisig = await deployMultisig(n, {
             commissionAddress: commissionWallet.address.toString(),
-            changingCommissionAddressTime: Math.floor(now() / 1000) - 60 * 60 * 50 // now - 50 hours
+            changingCommissionAddressTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
 
         const initialTemp = await multisig.getTempConfig()
@@ -1195,7 +1262,7 @@ describe('AdminMultisig', () => {
         const n = 3
         const multisig = await deployMultisig(n, {
             newFinancialCode: await compile("NewFinancialForUpdateCodeTest"),
-            changingFinancialCodeTime: Math.floor(now() / 1000) - 60 * 60 * 50 // now - 50 hours
+            changingFinancialCodeTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
 
         const initialTemp = await multisig.getTempConfig()
@@ -1319,6 +1386,36 @@ describe('AdminMultisig', () => {
             to: financial.address,
             body: transferBody,
             value: toNano('0.06'),
+            exitCode: AdminMultisigErrors.noErrors
+        })
+    })
+
+    it('[return ton] should transfer remaining balance to destination', async () => {
+        const n = 3
+        const multisig = await deployMultisig(n)
+
+        const anyone = await blockchain.treasury('anyone')
+
+        const returnTonPayload = getReturnTonPayload(anyone.address.toString())
+        const returnTonOrder = getOrderByPayload(returnTonPayload)
+
+        for (let i = 0; i < n; i++) {
+            returnTonOrder.sign(i, keypairs[i].secretKey)
+        }
+
+        const result = await multisig.sendOrder(returnTonOrder, keypairs[0].secretKey, 0)
+        expect(result.transactions.length).toBe(2)
+        expect(result.transactions).toHaveTransaction({
+            to: multisig.address,
+            exitCode: AdminMultisigErrors.noErrors
+        })
+
+        expect(result.transactions).toHaveTransaction({
+            from: multisig.address,
+            to: anyone.address,
+            value: (x) =>{
+                return x! >= toNano("4.7") && x! <= toNano("5")
+            },
             exitCode: AdminMultisigErrors.noErrors
         })
     })

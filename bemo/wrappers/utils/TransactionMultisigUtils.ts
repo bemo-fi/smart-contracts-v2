@@ -1,5 +1,11 @@
 import {Address, beginCell, Cell, toNano} from "ton-core";
 
+
+export const TransactionMultisigOpcodes = {
+    deposit: 0,
+    returnTon: 9
+}
+
 export function getSendTonFromFinancialPayload(
     validatorAddress: string,
     validatorRewardPercent: number,
@@ -13,6 +19,7 @@ export function getSendTonFromFinancialPayload(
         throw new Error("invalid percentage")
     }
     return beginCell()
+        .storeUint(TransactionMultisigOpcodes.deposit, 32)
         .storeAddress(Address.parse(validatorAddress))
         .storeUint(validatorRewardPercent * 100, 16)
         .storeUint(maxNominatorsCount, 16)
@@ -23,3 +30,9 @@ export function getSendTonFromFinancialPayload(
         .endCell()
 }
 
+export function getReturnTonPayload(destinationAddress: string): Cell {
+    return beginCell()
+        .storeUint(TransactionMultisigOpcodes.returnTon, 32)
+        .storeAddress(Address.parse(destinationAddress))
+        .endCell()
+}

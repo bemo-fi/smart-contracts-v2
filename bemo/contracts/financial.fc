@@ -120,24 +120,24 @@ global cell unstake_request_code;
 
 () save_data() impure inline {
     set_data(begin_cell()
-            .store_coins(jetton_total_supply)
-            .store_coins(ton_total_supply)
-            .store_coins(commission_total_supply)
-            .store_uint(commission_factor, 16)
-            .store_slice(commission_address)
-            .store_slice(admin_address)
-            .store_slice(transaction_address)
-            .store_ref(content)
-            .store_ref(jetton_wallet_code)
-            .store_ref(begin_cell()
-                    .store_int(last_lockup_epoch, 32)
-                    .store_coins(lockup_supply)
-                    .store_coins(next_lockup_supply)
-                    .store_coins(later_lockup_supply)
-                    .store_int(next_unstake_request_index, 64)
-                    .store_ref(unstake_request_code)
-                    .end_cell())
-            .end_cell()
+    .store_coins(jetton_total_supply)
+    .store_coins(ton_total_supply)
+    .store_coins(commission_total_supply)
+    .store_uint(commission_factor, 16)
+    .store_slice(commission_address)
+    .store_slice(admin_address)
+    .store_slice(transaction_address)
+    .store_ref(content)
+    .store_ref(jetton_wallet_code)
+    .store_ref(begin_cell()
+    .store_int(last_lockup_epoch, 32)
+    .store_coins(lockup_supply)
+    .store_coins(next_lockup_supply)
+    .store_coins(later_lockup_supply)
+    .store_int(next_unstake_request_index, 64)
+    .store_ref(unstake_request_code)
+    .end_cell())
+    .end_cell()
     );
 }
 
@@ -155,54 +155,54 @@ int is_resolvable?(slice addr) inline {
     slice to_wallet_address = calculate_jetton_wallet_address(state_init);
 
     cell receive_msg = begin_cell()
-            .store_uint(OP::INTERNAL_TRANSFER, 32)
-            .store_uint(query_id, 64)
-            .store_coins(jetton_amount)
-            .store_slice(my_address())
-            .store_slice(to_address)
-            .store_coins(100)
-            .store_int(0, 1)
-            .end_cell();
+    .store_uint(OP::INTERNAL_TRANSFER, 32)
+    .store_uint(query_id, 64)
+    .store_coins(jetton_amount)
+    .store_slice(my_address())
+    .store_slice(to_address)
+    .store_coins(100)
+    .store_int(0, 1)
+    .end_cell();
 
     var msg = begin_cell()
-            .store_uint(FLAGS::BOUNCEABLE, 6)
-            .store_slice(to_wallet_address)
-            .store_coins(TON_FOR_JETTON_MINT)
-            .store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
-            .store_ref(state_init)
-            .store_ref(receive_msg);
+    .store_uint(FLAGS::BOUNCEABLE, 6)
+    .store_slice(to_wallet_address)
+    .store_coins(TON_FOR_JETTON_MINT)
+    .store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
+    .store_ref(state_init)
+    .store_ref(receive_msg);
 
     send_raw_message(msg.end_cell(), SEND_MODE::PAY_FEE_SEPARATELY);
 }
 
 () deploy_unstake_request(int index, slice owner_address, int withdraw_ton_amount, int withdraw_jetton_amount, int lockup_timestamp) impure {
     var unstake_data = begin_cell()
-            .store_uint(OP::DEPLOY_UNSTAKE_REQUEST, 32)
-            .store_slice(owner_address)
-            .store_coins(withdraw_ton_amount)
-            .store_coins(withdraw_jetton_amount)
-            .store_int(lockup_timestamp, 32)
-            .end_cell();
+    .store_uint(OP::DEPLOY_UNSTAKE_REQUEST, 32)
+    .store_slice(owner_address)
+    .store_coins(withdraw_ton_amount)
+    .store_coins(withdraw_jetton_amount)
+    .store_uint(lockup_timestamp, 32)
+    .end_cell();
 
     cell state_init = calculate_unstake_request_state_init(index, my_address(), unstake_request_code);
     slice unstake_request_address = calculate_unstake_request_address(state_init);
 
     var msg = begin_cell()
-            .store_uint(FLAGS::NON_BOUNCEABLE, 6)
-            .store_slice(unstake_request_address)
-            .store_coins(0)
-            .store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
-            .store_ref(state_init)
-            .store_ref(unstake_data);
+    .store_uint(FLAGS::NON_BOUNCEABLE, 6)
+    .store_slice(unstake_request_address)
+    .store_coins(0)
+    .store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
+    .store_ref(state_init)
+    .store_ref(unstake_data);
 
     send_raw_message(msg.end_cell(), SEND_MODE::REMAINING_AMOUNT);
 }
 
 () return_unstake_request(slice unstake_request_address, int lockup_timestamp) impure {
     var unstake_data = begin_cell()
-            .store_uint(OP::RETURN_UNSTAKE_REQUEST, 32)
-            .store_int(lockup_timestamp, 32)
-            .end_cell();
+    .store_uint(OP::RETURN_UNSTAKE_REQUEST, 32)
+    .store_uint(lockup_timestamp, 32)
+    .end_cell();
 
     send_msg(unstake_request_address, 0, unstake_data, FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT);
 }
@@ -260,7 +260,7 @@ int is_resolvable?(slice addr) inline {
         ton_total_supply += stake_ton_amount;
         save_data();
 
-        mint(sender_address, stake_jetton_amount, 0, jetton_wallet_code);
+        mint(sender_address, stake_jetton_amount,  0, jetton_wallet_code);
         return ();
     }
 
@@ -282,7 +282,7 @@ int is_resolvable?(slice addr) inline {
         int withdraw_jetton_amount = in_msg_body~load_coins();
         slice owner_address = in_msg_body~load_msg_addr();
         throw_unless(ERROR::NOT_FROM_JETTON_WALLET,
-                equal_slices(calculate_user_jetton_wallet_address(owner_address, my_address(), jetton_wallet_code), sender_address)
+            equal_slices(calculate_user_jetton_wallet_address(owner_address, my_address(), jetton_wallet_code), sender_address)
         );
 
         int withdraw_ton_amount = muldiv(ton_total_supply, withdraw_jetton_amount, jetton_total_supply);
@@ -320,21 +320,21 @@ int is_resolvable?(slice addr) inline {
         var withdraw_ton_amount = in_msg_body~load_coins();
         var withdraw_jetton_amount = in_msg_body~load_coins();
 
-        if (balance - MIN_TON_FOR_STORAGE >= withdraw_ton_amount) {
+        if (balance >= withdraw_ton_amount + msg_value) {
 
             refresh_lockup_config();
 
             lockup_supply -= withdraw_ton_amount;
 
-            int ton_balance_before_msg = balance - msg_value;
-            int storage_fee = MIN_TON_FOR_STORAGE - min(ton_balance_before_msg, MIN_TON_FOR_STORAGE);
+            var unstake_amount = withdraw_ton_amount + msg_value - (LOCKUP_GAS_CONSUMPTION + UNSTAKE_GAS_CONSUMPTION);
 
-            var unstake_amount = withdraw_ton_amount + msg_value - (storage_fee + LOCKUP_GAS_CONSUMPTION + UNSTAKE_GAS_CONSUMPTION);
+            int ton_balance_after_unstake = balance - unstake_amount;
+            int storage_fee = MIN_TON_FOR_STORAGE - min(ton_balance_after_unstake, MIN_TON_FOR_STORAGE);
 
-            send_msg(owner_address, unstake_amount, null(), FLAGS::NON_BOUNCEABLE, SEND_MODE::IGNORE_ERRORS); ;; non-bounceable, fee deducted from amount, ignore errors
+            send_msg(owner_address, unstake_amount - storage_fee, null(), FLAGS::NON_BOUNCEABLE, SEND_MODE::IGNORE_ERRORS); ;; non-bounceable, fee deducted from amount, ignore errors
             save_data();
         } else {
-            return_unstake_request(unstake_request_address, now());
+            return_unstake_request(unstake_request_address, now() + (TIME::LOCKUP_PERIOD / 2));
         }
         return ();
     }
@@ -344,10 +344,10 @@ int is_resolvable?(slice addr) inline {
         throw_unless(ERROR::INSUFFICIENT_MSG_VALUE, msg_value >= MINIMUM_TON_FOR_POOLS);
 
         var msg = begin_cell()
-                .store_uint(OP::GET_POOLS, 32)
-                .store_coins(jetton_total_supply)
-                .store_coins(ton_total_supply)
-                .end_cell();
+        .store_uint(OP::GET_POOLS, 32)
+        .store_coins(jetton_total_supply)
+        .store_coins(ton_total_supply)
+        .end_cell();
 
         send_msg(sender_address, 0, msg, FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT);
 
@@ -363,12 +363,12 @@ int is_resolvable?(slice addr) inline {
         cell custom_payload = in_msg_body~load_maybe_ref();
 
         var msg = begin_cell()
-                .store_uint(OP::TAKE_CURRENT_QUOTE, 32)
-                .store_uint(query_id, 64)
-                .store_uint(ton_total_supply, 128)
-                .store_uint(jetton_total_supply, 128)
-                .store_maybe_ref(custom_payload)
-                .end_cell();
+        .store_uint(OP::TAKE_CURRENT_QUOTE, 32)
+        .store_uint(query_id, 64)
+        .store_uint(ton_total_supply, 128)
+        .store_uint(jetton_total_supply, 128)
+        .store_maybe_ref(custom_payload)
+        .end_cell();
 
         send_msg(sender_address, 0, msg, FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT);
 
@@ -383,16 +383,16 @@ int is_resolvable?(slice addr) inline {
         int include_address? = in_msg_body~load_uint(1);
 
         cell included_address = include_address?
-                ? begin_cell().store_slice(owner_address).end_cell()
-                : null();
+        ? begin_cell().store_slice(owner_address).end_cell()
+        : null();
 
         var msg = begin_cell()
-                .store_uint(0x18, 6)
-                .store_slice(sender_address)
-                .store_coins(0)
-                .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
-                .store_uint(OP::TAKE_WALLET_ADDRESS, 32)
-                .store_uint(query_id, 64);
+        .store_uint(0x18, 6)
+        .store_slice(sender_address)
+        .store_coins(0)
+        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .store_uint(OP::TAKE_WALLET_ADDRESS, 32)
+        .store_uint(query_id, 64);
 
         if (is_resolvable?(owner_address)) {
             msg = msg.store_slice(calculate_user_jetton_wallet_address(owner_address, my_address(), jetton_wallet_code));
@@ -489,15 +489,15 @@ int is_resolvable?(slice addr) inline {
         slice destination_address = in_msg_body~load_msg_addr();
         int jetton_amount = in_msg_body~load_coins();
         cell transfer_body = begin_cell()
-                .store_uint(OP::TRANSFER_JETTON, 32)
-                .store_uint(0, 64)
-                .store_coins(jetton_amount)
-                .store_slice(destination_address)
-                .store_slice(destination_address)
-                .store_int(0, 1)
-                .store_coins(0)
-                .store_int(0, 1)
-                .end_cell();
+        .store_uint(OP::TRANSFER_JETTON, 32)
+        .store_uint(0, 64)
+        .store_coins(jetton_amount)
+        .store_slice(destination_address)
+        .store_slice(destination_address)
+        .store_int(0, 1)
+        .store_coins(0)
+        .store_int(0, 1)
+        .end_cell();
         send_msg(jetton_wallet_address, 0, transfer_body, FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT + SEND_MODE::IGNORE_ERRORS);
         return();
     }
@@ -519,21 +519,21 @@ int is_resolvable?(slice addr) inline {
     load_data();
 
     return (
-            jetton_total_supply,
-            ton_total_supply,
-            commission_total_supply,
-            commission_factor,
-            commission_address,
-            admin_address,
-            transaction_address,
-            content,
-            jetton_wallet_code,
-            unstake_request_code,
-            last_lockup_epoch,
-            lockup_supply,
-            next_lockup_supply,
-            later_lockup_supply,
-            next_unstake_request_index
+        jetton_total_supply,
+        ton_total_supply,
+        commission_total_supply,
+        commission_factor,
+        commission_address,
+        admin_address,
+        transaction_address,
+        content,
+        jetton_wallet_code,
+        unstake_request_code,
+        last_lockup_epoch,
+        lockup_supply,
+        next_lockup_supply,
+        later_lockup_supply,
+        next_unstake_request_index
     );
 }
 

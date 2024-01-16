@@ -6,13 +6,15 @@
 
 ;; =============== consts =============================
 
-const MIN_TON_FOR_CHANGING_FINANCIAL = 30000000; ;; 0.03 TON
+const MIN_TON_FOR_CHANGING_FINANCIAL = 1000000000; ;; 1 TON
 const MIN_TON_FOR_SEND_COMMISSION = 10000000; ;; 0.01 TON
 const MIN_TON_FOR_TRANSFER_JETTON = 60000000; ;; 0.06 TON
 const MIN_TON_FOR_INTERNAL = 20000000; ;; 0.02 TON
+const MIN_TON_FOR_STORAGE = 200000000 ; ;; 0.2 TON
 
 ;; time
-const TIME::UPDATE_DELAY = 324000; ;; 90h
+const TIME::UPDATE_DELAY = 648000; ;; 180h
+const TIME::MAX_DELAY_FOR_QUERY_ID = 24 * 60 * 60; ;; 24h
 const TIME::DELAY_FOR_VOTING  = 3600; ;; 1h
 
 const MAX_FLOOD = 10;
@@ -33,6 +35,7 @@ const OP::CHANGE_FINANCIAL_CODE = 600;
 const OP::CANCEL_CHANGING_FINANCIAL_CODE = 601;
 const OP::SEND_COMMISSION_FROM_FINANCIAL = 7;
 const OP::TRANFER_JETTON_FROM_FINANCIAL = 8;
+const OP::RETURN_TON = 9;
 
 ;; financial ops
 const FIN_OP::CHANGE_ADMIN = 2;
@@ -268,6 +271,10 @@ global cell owners_addresses_info;
 
         send_msg(financial_address, MIN_TON_FOR_TRANSFER_JETTON, transfer_payload, FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
 
+    } elseif (op == OP::RETURN_TON) {
+        slice destination_address = msg_body~load_msg_addr();
+        int balance = pair_first(get_balance());
+        send_msg(destination_address, balance - MIN_TON_FOR_STORAGE, null(), FLAGS::NON_BOUNCEABLE,  SEND_MODE::IGNORE_ERRORS);
     }
     return pack_temp_upgrade(admin_address, changing_admin_time, transaction_address, changing_transaction_address_time, commission_factor, changing_commission_time, commission_address, changing_commission_address_time, changing_content_time, changing_financial_code_time, jetton_content, financial_code);
 }
@@ -350,14 +357,14 @@ global cell owners_addresses_info;
         return ();
     }
 
-    throw_unless(ERROR::INSUFFICIENT_INTERNAL_MSG_VALUE, msg_value >= MIN_TON_FOR_INTERNAL);
-
     slice cs = in_msg_full.begin_parse();
     int flags = cs~load_uint(4);
 
     if (flags & 1) { ;; ignore all bounced messages
         return ();
     }
+
+    throw_unless(ERROR::INSUFFICIENT_INTERNAL_MSG_VALUE, msg_value >= MIN_TON_FOR_INTERNAL);
 
     load_data();
     slice sender_address = cs~load_msg_addr();
@@ -371,6 +378,7 @@ global cell owners_addresses_info;
     int query_id = in_msg_body~load_uint(64);
     var bound = (now() << 32);
     throw_if(ERROR::INVALID_QUERY_ID, query_id < bound);
+    throw_if(ERROR::INVALID_QUERY_ID, query_id > (bound + (TIME::MAX_DELAY_FOR_QUERY_ID << 32)));
 
     (slice query, var found?) = pending_queries.udict_get?(64, query_id);
     ifnot (found?) {
@@ -425,6 +433,7 @@ global cell owners_addresses_info;
     throw_if(ERROR::QUERY_HAS_ALREADY_BEEN_COMPLETED, found?);
     var bound = (now() << 32);
     throw_if(ERROR::INVALID_QUERY_ID, query_id < bound);
+    throw_if(ERROR::INVALID_QUERY_ID, query_id > (bound + (TIME::MAX_DELAY_FOR_QUERY_ID << 32)));
 
     set_gas_limit(100000);
     pending_queries~udict_set_builder(64, query_id, begin_cell().store_int(0, 1));

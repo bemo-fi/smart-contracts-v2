@@ -29,11 +29,11 @@ export function nominatorProxyConfigToCell(config: NominatorProxyConfig): Cell {
         .storeUint(config.depositTime ?? 0, 64)
         .storeUint(config.withdrawnTime ?? 0, 64)
 
-        if(config.lastWithdrawAddress != null){
-            cell.storeAddress(Address.parse(config.lastWithdrawAddress))
-        } else {
-            cell.storeSlice(beginCell().storeUint(0, 2).endCell().beginParse())
-        }
+    if(config.lastWithdrawAddress != null){
+        cell.storeAddress(Address.parse(config.lastWithdrawAddress))
+    } else {
+        cell.storeSlice(beginCell().storeUint(0, 2).endCell().beginParse())
+    }
 
     return cell.endCell()
 }
@@ -54,6 +54,7 @@ export const NominatorProxyErrors = {
     excessMsgValue: 204,
     withdrawHasAlreadyBeenMade: 205,
     withdrawTimeHasNotYetCome: 206,
+    depositHasAlreadyBeenMade: 207,
     unknownOp: 0xffff,
 }
 

@@ -1,5 +1,5 @@
 import {Blockchain, SandboxContract, TreasuryContract} from '@ton-community/sandbox'
-import {Address, beginCell, Cell, toNano} from 'ton-core'
+import {Address, beginCell, Cell, fromNano, toNano} from 'ton-core'
 import {NominatorProxy, NominatorProxyErrors} from '../wrappers/NominatorProxy'
 import '@ton-community/test-utils'
 import {compile} from '@ton-community/blueprint'
@@ -172,12 +172,37 @@ describe('NominatorProxy', () => {
         expect(proxyData.depositTime).toBeCloseTo(depositTime)
     })
 
-    it('[from financial] deposit time should not change', async () => {
+    it('[from financial] should thrown an error if deposited twice', async () => {
         await nominatorProxy.sendTonToNominatorProxy(financial.getSender(), toNano(20001))
         const initialProxyData = await nominatorProxy.getProxyData()
-        await nominatorProxy.sendTonToNominatorProxy(financial.getSender(), toNano(20001))
+        const result = await nominatorProxy.sendTonToNominatorProxy(financial.getSender(), toNano(20001))
+
+        expect(result.transactions.length).toBe(3)
+
+        expect(result.transactions).toHaveTransaction(
+            {
+                from: financial.address,
+                to: nominatorProxy.address,
+                value: toNano('20001'),
+                success: false,
+                exitCode: NominatorProxyErrors.depositHasAlreadyBeenMade
+            }
+        )
+
+        expect(result.transactions).toHaveTransaction(
+            {
+                from: nominatorProxy.address,
+                to: financial.address,
+                value:(x) => {
+                    return x! >= toNano(20000) && x! <= toNano(20001)
+                },
+                success: true,
+                exitCode: NominatorProxyErrors.noErrors
+            }
+        )
+
         const proxyData = await nominatorProxy.getProxyData()
-        expect(proxyData.depositAmount).toBeCloseTo(initialProxyData.depositAmount! + 20001, 1)
+        expect(proxyData.depositAmount).toBeCloseTo(initialProxyData.depositAmount!, 1)
         expect(proxyData.depositTime).toBe(initialProxyData.depositTime)
     })
 
@@ -369,10 +394,9 @@ describe('NominatorProxy', () => {
             validatorRewardPercent: 40
         }, nominatorPoolCode, -1))
 
-        const depositTime = Math.floor(now() / 1000) - 60 * 60 * 10 // now - 10 hours
         const nominatorProxy1 = blockchain.openContract(await NominatorProxy.createFromConfig({
-            depositAmount: 1,
-            depositTime: depositTime,
+            depositAmount: 0,
+            depositTime: 0,
             financialAddress: financial.address.toString(),
             nominatorPoolAddress: pool.address.toString()
         }, code))
@@ -395,16 +419,19 @@ describe('NominatorProxy', () => {
         })
 
         const depositAmount = toNano(20001)
+        const depositTime = Math.floor(now() / 1000)
+        blockchain.now = depositTime
         await nominatorProxy1.sendTonToNominatorProxy(financial.getSender(), depositAmount)
-
         const initialProxyData = await nominatorProxy1.getProxyData()
+        expect(initialProxyData.depositAmount).toBeCloseTo(Number(fromNano(depositAmount)), 1)
         expect(initialProxyData.depositTime).toBe(depositTime)
         expect(initialProxyData.withdrawnTime).toBe(0)
 
         const anyone = await blockchain.treasury('anyone')
-        const withdrawTime = Math.floor(now() / 1000) // now
-        await pool.sendValidatorDeposit(nominatorPool.getSender(), toNano("100"))
 
+        blockchain.now = blockchain.now + 20 * 60 * 60
+        await pool.sendValidatorDeposit(nominatorPool.getSender(), toNano("100"))
+        const withdrawTime = blockchain.now
 
         const tonAmount = toNano(1)
         const result = await nominatorProxy1.sendTonToNominatorProxy(anyone.getSender(), tonAmount)

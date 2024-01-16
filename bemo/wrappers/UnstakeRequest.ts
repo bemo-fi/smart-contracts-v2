@@ -80,7 +80,7 @@ export class UnstakeRequest implements Contract {
                 .storeAddress(Address.parse(opts.ownerAddress))
                 .storeCoins(toNano(opts.withdrawTonAmount.toString()))
                 .storeCoins(toNano(opts.withdrawJettonAmount.toString()))
-                .storeInt(opts.unlockTimestamp, 32)
+                .storeUint(opts.unlockTimestamp, 32)
                 .endCell(),
         });
     }
@@ -93,7 +93,7 @@ export class UnstakeRequest implements Contract {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
                 .storeUint(UnstakeRequestOpCodes.return, 32)
-                .storeInt(opts.unlockTimestamp, 32)
+                .storeUint(opts.unlockTimestamp, 32)
                 .endCell(),
         });
     }

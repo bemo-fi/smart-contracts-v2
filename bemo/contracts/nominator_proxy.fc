@@ -25,12 +25,17 @@ const OP::SIMPLE_TRANSFER = 0;
 const OP::RETURN_TON_TO_FINANCIAL = 1;
 const OP::ACCEPT_TON = 2;
 
+;; financial ops
+const FIN_OP::ACCEPT_REWARD = 1;
+const FIN_OP::ACCEPT_TON = 9;
+
 ;; errors
 const ERROR::UNKNOWN_ACTION = 202;
 const ERROR::NOT_DEPOSITED = 203;
 const ERROR::EXCESS_MSG_VALUE = 204;
 const ERROR::WITHDRAW_HAS_ALREADY_BEEN_MADE = 205;
 const ERROR::WITHDRAW_TIME_HAS_NOT_YET_COME = 206;
+const ERROR::DEPOSIT_HAS_ALREADY_BEEN_MADE = 207;
 
 
 ;; =============== storage =============================
@@ -92,7 +97,7 @@ const ERROR::WITHDRAW_TIME_HAS_NOT_YET_COME = 206;
         if (deposit_amount <= MIN_NOMINATOR_STAKE) {
             deposit_amount = 0;
         }
-        send_msg(financial_address, 0, begin_cell().store_uint(9, 32).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT);
+        send_msg(financial_address, 0, begin_cell().store_uint(FIN_OP::ACCEPT_TON, 32).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT);
     } else {
         send_msg(last_withdraw_address, 0, null(), FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT);
         last_withdraw_address = begin_cell().store_uint(0, 2).end_cell().begin_parse();
@@ -128,13 +133,11 @@ const ERROR::WITHDRAW_TIME_HAS_NOT_YET_COME = 206;
 
         if (equal_slices(sender_address, financial_address)) {
             ;; deposit to nominator pool
+            throw_unless(ERROR::DEPOSIT_HAS_ALREADY_BEEN_MADE, deposit_amount == 0);
             throw_unless(ERROR::INSUFFICIENT_BALANCE, msg_value > MIN_NOMINATOR_STAKE);
 
-            if (deposit_amount == 0) {
-                deposit_time = now();
-            }
-
-            deposit_amount += msg_value;
+            deposit_time = now();
+            deposit_amount = msg_value;
 
             send_msg_to_nominator(nominator_pool_address, msg_value, true, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
 
@@ -144,12 +147,12 @@ const ERROR::WITHDRAW_TIME_HAS_NOT_YET_COME = 206;
                     send_msg(last_withdraw_address, 0, null(), FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT + SEND_MODE::IGNORE_ERRORS);
                     last_withdraw_address = begin_cell().store_uint(0, 2).end_cell().begin_parse();
                 } else {
-                    send_msg(financial_address, 0, begin_cell().store_uint(9, 32).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT + SEND_MODE::IGNORE_ERRORS);
+                    send_msg(financial_address, 0, begin_cell().store_uint(FIN_OP::ACCEPT_TON, 32).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT + SEND_MODE::IGNORE_ERRORS);
                 }
             } else {
                 int reward = msg_value - deposit_amount;
                 reward = reward < 0 ? 0 : reward;
-                send_msg(financial_address, msg_value, begin_cell().store_uint(1, 32).store_coins(reward).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
+                send_msg(financial_address, msg_value, begin_cell().store_uint(FIN_OP::ACCEPT_REWARD, 32).store_coins(reward).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
                 deposit_amount = 0;
             }
         } else {

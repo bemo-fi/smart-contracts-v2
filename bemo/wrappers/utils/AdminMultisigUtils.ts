@@ -15,7 +15,8 @@ export const AdminMultisigOpcodes = {
     changeFinancialCode: 600,
     cancelChangingFinancialCode: 601,
     sendCommission: 7,
-    transferJetton: 8
+    transferJetton: 8,
+    returnTon: 9
 }
 
 
@@ -120,5 +121,13 @@ export function getTransferJettonPayload(jettonWalletAddress: string, destinatio
         .storeAddress(Address.parse(jettonWalletAddress))
         .storeAddress(Address.parse(destinationAddress))
         .storeCoins(toNano(jettonAmount.toString()))
+        .endCell()
+}
+
+
+export function getReturnTonPayload(destinationAddress: string): Cell {
+    return beginCell()
+        .storeUint(AdminMultisigOpcodes.returnTon, 32)
+        .storeAddress(Address.parse(destinationAddress))
         .endCell()
 }

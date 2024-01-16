@@ -36,7 +36,7 @@ describe('UnstakeRequest', () => {
                 .storeAddress(owner.address)
                 .storeCoins(toNano(withdrawTonAmount.toString()))
                 .storeCoins(toNano(withdrawJettonAmount.toString()))
-                .storeInt(unlockTimestamp, 32)
+                .storeUint(unlockTimestamp, 32)
                 .endCell(),
             success: true
         })
@@ -90,7 +90,7 @@ describe('UnstakeRequest', () => {
                 .storeAddress(owner.address)
                 .storeCoins(toNano(100))
                 .storeCoins(toNano(100))
-                .storeInt(100, 32)
+                .storeUint(100, 32)
                 .endCell(),
             success: false,
             exitCode: UnstakeRequestErrors.notAllowed
@@ -225,7 +225,7 @@ describe('UnstakeRequest', () => {
             to: unstakeRequest.address,
             body: beginCell()
                 .storeUint(UnstakeRequestOpCodes.return, 32)
-                .storeInt(unlockTimestamp, 32)
+                .storeUint(unlockTimestamp, 32)
                 .endCell(),
             success: false,
             exitCode: UnstakeRequestErrors.notAllowed
@@ -266,7 +266,7 @@ describe('UnstakeRequest', () => {
             to: unstakeRequest.address,
             body: beginCell()
                 .storeUint(UnstakeRequestOpCodes.return, 32)
-                .storeInt(unlockTimestamp, 32)
+                .storeUint(unlockTimestamp, 32)
                 .endCell(),
             success: true
         })
