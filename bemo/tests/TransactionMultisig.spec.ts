@@ -4,7 +4,11 @@ import {TransactionMultisig, TransactionMultisigErrors} from '../wrappers/Transa
 import '@ton-community/test-utils';
 import {compile} from '@ton-community/blueprint';
 import {getOrderByPayload, getOrderByPayloads} from "../wrappers/utils/MultisigOrder";
-import {getReturnTonPayload, getSendTonFromFinancialPayload} from "../wrappers/utils/TransactionMultisigUtils";
+import {
+    getForceQueueClearing,
+    getReturnTonPayload,
+    getSendTonFromFinancialPayload
+} from "../wrappers/utils/TransactionMultisigUtils";
 import {NominatorPoolCodeBase64} from "../wrappers/NominatorPool";
 import {NominatorProxy} from "../wrappers/NominatorProxy";
 import {KeyPair} from "ton-crypto/dist/primitives/nacl";
@@ -366,5 +370,52 @@ describe('TransactionMultisig', () => {
             },
             exitCode: TransactionMultisigErrors.noErrors
         })
+    })
+
+    it('should force clear completed_queries', async () => {
+        const n = 3
+        const multisig = await deployMultisig(n)
+
+        const anyone = await blockchain.treasury('anyone')
+
+        const returnTonPayload = getReturnTonPayload(anyone.address.toString())
+        const returnTonOrder = getOrderByPayload(returnTonPayload, 0, 4000)
+
+        for (let i = 0; i < n; i++) {
+            returnTonOrder.sign(i, keypairs[i].secretKey)
+        }
+
+        await multisig.sendOrder(returnTonOrder, keypairs[0].secretKey, 0)
+
+        let completedQueries = await multisig.getCompletedQueries()
+        expect(completedQueries).toBeInstanceOf(Cell)
+
+        const forcePayload = getForceQueueClearing()
+        const forceOrder = getOrderByPayload(forcePayload, 0, 7000)
+
+        for (let i = 0; i < n; i++) {
+            forceOrder.sign(i, keypairs[i].secretKey)
+        }
+
+        const result = await multisig.sendOrder(forceOrder, keypairs[0].secretKey, 0)
+        expect(result.transactions.length).toBe(1)
+        expect(result.transactions).toHaveTransaction({
+            to: multisig.address,
+            exitCode: TransactionMultisigErrors.noErrors
+        })
+
+        completedQueries = await multisig.getCompletedQueries()
+        expect(completedQueries).toBe(null)
+
+        const returnTonOrder2 = getOrderByPayload(returnTonPayload, 0, 9000)
+
+        for (let i = 0; i < n; i++) {
+            returnTonOrder2.sign(i, keypairs[i].secretKey)
+        }
+
+        await multisig.sendOrder(returnTonOrder2, keypairs[0].secretKey, 0)
+
+        completedQueries = await multisig.getCompletedQueries()
+        expect(completedQueries).toBeInstanceOf(Cell)
     })
 });

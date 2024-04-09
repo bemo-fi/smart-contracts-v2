@@ -16,7 +16,8 @@ export const AdminMultisigOpcodes = {
     cancelChangingFinancialCode: 601,
     sendCommission: 7,
     transferJetton: 8,
-    returnTon: 9
+    returnTon: 9,
+    forceQueueClearing: 10
 }
 
 
@@ -129,5 +130,11 @@ export function getReturnTonPayload(destinationAddress: string): Cell {
     return beginCell()
         .storeUint(AdminMultisigOpcodes.returnTon, 32)
         .storeAddress(Address.parse(destinationAddress))
+        .endCell()
+}
+
+export function getForceQueueClearing(): Cell {
+    return beginCell()
+        .storeUint(AdminMultisigOpcodes.forceQueueClearing, 32)
         .endCell()
 }

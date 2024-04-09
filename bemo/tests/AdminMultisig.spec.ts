@@ -16,7 +16,11 @@ import {
     getChangeContentPayload,
     getChangeTransactionMultisigPayload,
     getSendCommissionPayload,
-    getChangeFinancialCodePayload, getAdminMultisigInternalPayload, getTransferJettonPayload, getReturnTonPayload
+    getChangeFinancialCodePayload,
+    getAdminMultisigInternalPayload,
+    getTransferJettonPayload,
+    getReturnTonPayload,
+    getForceQueueClearing
 } from "../wrappers/utils/AdminMultisigUtils";
 import {buildJettonOnchainMetadata} from "../wrappers/utils/ContentUtils";
 import now = jest.now;
@@ -435,6 +439,75 @@ describe('AdminMultisig', () => {
 
         owner0Flood = await multisig.getOwnerFlood(owner0.address.toString())
         expect(owner0Flood.flood).toBe(initOwner0Flood.flood - 1)
+    })
+
+    it('should force clear pending_queries', async () => {
+        const n = 3
+        const multisig = await deployMultisig(n)
+        const newAdmin = await blockchain.treasury('newAdmin')
+        const changeAdminMultisigPayload = getChangeAdminMultisigPayload(newAdmin.address.toString())
+
+        const tonAmount = toNano('0.1')
+
+        const owner0 = await blockchain.treasury('owner0')
+
+        for (let i = 0; i < 10; i++) {
+            let changeAdminMultisigMsg = getAdminMultisigInternalPayload(changeAdminMultisigPayload,  0, 7200 + i)
+            let result = await multisig.sendInternal(owner0.getSender(), tonAmount, changeAdminMultisigMsg)
+            expect(result.transactions.length).toBe(2)
+
+            expect(result.transactions).toHaveTransaction({
+                from: owner0.address,
+                to: multisig.address,
+                value: tonAmount,
+                success: true,
+            })
+        }
+
+        let pendingQueries = await multisig.getPendingQueries()
+        expect(pendingQueries).toBeInstanceOf(Cell)
+
+        let owner0Flood = await multisig.getOwnerFlood(owner0.address.toString())
+        expect(owner0Flood.flood).toBe(10)
+
+        const forcePayload = getForceQueueClearing()
+        const forceOrder = getOrderByPayload(forcePayload, 0, 7300)
+
+        for (let i = 0; i < n; i++) {
+            forceOrder.sign(i, keypairs[i].secretKey)
+        }
+
+        const result = await multisig.sendOrder(forceOrder, keypairs[0].secretKey, 0)
+        expect(result.transactions.length).toBe(1)
+        expect(result.transactions).toHaveTransaction({
+            to: multisig.address,
+            exitCode: AdminMultisigErrors.noErrors
+        })
+
+        owner0Flood = await multisig.getOwnerFlood(owner0.address.toString())
+        expect(owner0Flood.flood).toBe(0)
+
+        pendingQueries = await multisig.getPendingQueries()
+        expect(pendingQueries).toBe(null)
+
+        for (let i = 0; i < 10; i++) {
+            let changeAdminMultisigMsg = getAdminMultisigInternalPayload(changeAdminMultisigPayload,  0, 7300 + i)
+            let result = await multisig.sendInternal(owner0.getSender(), tonAmount, changeAdminMultisigMsg)
+            expect(result.transactions.length).toBe(2)
+
+            expect(result.transactions).toHaveTransaction({
+                from: owner0.address,
+                to: multisig.address,
+                value: tonAmount,
+                success: true,
+            })
+        }
+
+        owner0Flood = await multisig.getOwnerFlood(owner0.address.toString())
+        expect(owner0Flood.flood).toBe(10)
+
+        pendingQueries = await multisig.getPendingQueries()
+        expect(pendingQueries).toBeInstanceOf(Cell)
     })
 
     it('should throw an error if signed by a non-owner', async () => {

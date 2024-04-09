@@ -13,6 +13,7 @@ const MIN_TON_FOR_STORAGE = 200000000; ;; 0.2 TON
 ;; ops
 const OP::DEPOSIT = 0;
 const OP::RETURN_TON = 9;
+const OP::FORCE_QUEUE_CLEARING = 10;
 
 ;; financial ops
 const FIN_OP::SEND_TON_FROM_FINANCIAL = 70;
@@ -164,6 +165,9 @@ global cell nominator_pool_code;
             slice destination_address = msg_ref_body~load_msg_addr();
             int balance = pair_first(get_balance());
             send_msg(destination_address, balance - MIN_TON_FOR_STORAGE, null(), FLAGS::NON_BOUNCEABLE, SEND_MODE::IGNORE_ERRORS);
+        } elseif (op == OP::FORCE_QUEUE_CLEARING) {
+            completed_queries = null();
+            save_data();
         }
     }
 

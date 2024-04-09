@@ -142,6 +142,16 @@ export class TransactionMultisig implements Contract {
         );
     }
 
+    async getCompletedQueries(provider: ContractProvider): Promise<Cell | null> {
+        const result = await provider.get('get_full_data', [])
+        result.stack.readNumber()
+        result.stack.readNumber()
+        result.stack.readNumber()
+        result.stack.readCell()
+
+        return result.stack.readCellOpt()
+    }
+
     async getPoolAndProxyAddresses(
         provider: ContractProvider,
         validatorAddress: string,

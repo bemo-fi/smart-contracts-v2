@@ -511,7 +511,6 @@ cell distribute_share(int reward, cell nominators) inline_ref {
             throw_unless(70, ((op >= 1) & (op <= 7)) | (op == op::recover_stake()) | (op == op::new_stake()));
 
             if (op == 1) {
-                nominators = distribute_share(msg_value, nominators);
                 ;; just accept coins
             }
 

@@ -7,7 +7,7 @@ import {
     ContractProvider,
     Dictionary,
     Sender,
-    SendMode
+    SendMode, Slice
 } from 'ton-core';
 import {Buffer} from "buffer";
 import {buildJettonOnchainMetadata, JettonMetadata, readJettonMetadata} from "./utils/ContentUtils";
@@ -239,6 +239,16 @@ export class AdminMultisig implements Contract {
             Dictionary.Keys.Uint(8),
             Dictionary.Values.Buffer(32)
         );
+    }
+
+    async getPendingQueries(provider: ContractProvider): Promise<Cell | null> {
+        const result = await provider.get('get_full_data', [])
+        result.stack.readNumber()
+        result.stack.readNumber()
+        result.stack.readNumber()
+        result.stack.readCell()
+
+        return result.stack.readCellOpt()
     }
 
     async getOwnerFlood(provider: ContractProvider, address: string): Promise<OwnerFlood> {

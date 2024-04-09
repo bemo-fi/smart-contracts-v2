@@ -36,6 +36,7 @@ const OP::CANCEL_CHANGING_FINANCIAL_CODE = 601;
 const OP::SEND_COMMISSION_FROM_FINANCIAL = 7;
 const OP::TRANFER_JETTON_FROM_FINANCIAL = 8;
 const OP::RETURN_TON = 9;
+const OP::FORCE_QUEUE_CLEARING = 10;
 
 ;; financial ops
 const FIN_OP::CHANGE_ADMIN = 2;
@@ -270,11 +271,22 @@ global cell owners_addresses_info;
         .end_cell();
 
         send_msg(financial_address, MIN_TON_FOR_TRANSFER_JETTON, transfer_payload, FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
-
     } elseif (op == OP::RETURN_TON) {
         slice destination_address = msg_body~load_msg_addr();
         int balance = pair_first(get_balance());
         send_msg(destination_address, balance - MIN_TON_FOR_STORAGE, null(), FLAGS::NON_BOUNCEABLE,  SEND_MODE::IGNORE_ERRORS);
+    } elseif (op == OP::FORCE_QUEUE_CLEARING) {
+        pending_queries = new_dict();
+        cell owners = owners_addresses_info;
+        do {
+            var (owners', addr, info, f) = owners.udict_delete_get_min(256);
+            f~touch();
+            if (f) {
+                (int i, _) = unpack_owner_address_info(info);
+                owners_addresses_info~udict_set_builder(256, addr, pack_owner_address_info(i, 0));
+                owners = owners';
+            }
+        } until (~ f);
     }
     return pack_temp_upgrade(admin_address, changing_admin_time, transaction_address, changing_transaction_address_time, commission_factor, changing_commission_time, commission_address, changing_commission_address_time, changing_content_time, changing_financial_code_time, jetton_content, financial_code);
 }
