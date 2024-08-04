@@ -2,7 +2,7 @@
 
 #include "imports/stdlib.fc";
 #include "imports/utils.fc";
-#include "imports/nominator-proxy-utils.fc";
+#include "imports/nominator_proxy_utils.fc";
 
 #pragma version >=0.4.0;
 
@@ -13,7 +13,6 @@ const MIN_TON_FOR_STORAGE = 200000000; ;; 0.2 TON
 ;; ops
 const OP::DEPOSIT = 0;
 const OP::RETURN_TON = 9;
-const OP::FORCE_QUEUE_CLEARING = 10;
 
 ;; financial ops
 const FIN_OP::SEND_TON_FROM_FINANCIAL = 70;
@@ -128,7 +127,7 @@ global cell nominator_pool_code;
     int query_wallet_id = in_msg~load_uint(32);
     throw_unless(ERROR::WALLET_ID_DOES_NOT_MATCH, query_wallet_id == multisig_wallet_id);
 
-    int query_id = in_msg~load_uint(64);
+    int query_id = in_msg~load_query_id();
     (slice query, var found?) = completed_queries.udict_get?(64, query_id);
     throw_if(ERROR::QUERY_HAS_ALREADY_BEEN_COMPLETED, found?);
     var bound = (now() << 32);
@@ -146,7 +145,7 @@ global cell nominator_pool_code;
 
     while (in_msg.slice_refs()) {
         slice msg_ref_body = (in_msg~load_ref()).begin_parse();
-        int op = msg_ref_body~load_uint(32);
+        int op = msg_ref_body~load_op();
 
         if (op == OP::DEPOSIT) {
             slice validator_addr = msg_ref_body~load_msg_addr();
@@ -160,14 +159,11 @@ global cell nominator_pool_code;
             int amount = msg_ref_body~load_coins();
             slice nominator_pool_address = calculate_nominator_pool_address(validator_int_address, validator_reward_share, max_nominators_count, min_validator_stake, min_nominator_stake, nominator_pool_code);
             slice nominator_proxy_address = calculate_nominator_proxy_address(proxy_wallet_id, financial_address, nominator_pool_address, nominator_proxy_code);
-            send_msg(financial_address, MIN_TON_FOR_SEND_MSG, begin_cell().store_uint(FIN_OP::SEND_TON_FROM_FINANCIAL, 32).store_slice(nominator_proxy_address).store_coins(amount).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::IGNORE_ERRORS);
+            send_msg(financial_address, MIN_TON_FOR_SEND_MSG, begin_cell().store_op(FIN_OP::SEND_TON_FROM_FINANCIAL).store_slice(nominator_proxy_address).store_coins(amount).store_maybe_ref(null()).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::IGNORE_ERRORS);
         } elseif (op == OP::RETURN_TON) {
             slice destination_address = msg_ref_body~load_msg_addr();
             int balance = pair_first(get_balance());
             send_msg(destination_address, balance - MIN_TON_FOR_STORAGE, null(), FLAGS::NON_BOUNCEABLE, SEND_MODE::IGNORE_ERRORS);
-        } elseif (op == OP::FORCE_QUEUE_CLEARING) {
-            completed_queries = null();
-            save_data();
         }
     }
 

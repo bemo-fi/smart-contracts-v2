@@ -8,10 +8,9 @@ import {
     Dictionary,
     Sender,
     SendMode, toNano
-} from 'ton-core';
-import {Buffer} from "buffer";
+} from '@ton/core';
 import {MultisigOrder} from "./utils/MultisigOrder";
-import {sign} from "ton-crypto";
+import {sign} from "@ton/crypto";
 
 export type TransactionMultisigConfig = {
     publicKeys: Buffer[],
@@ -134,22 +133,37 @@ export class TransactionMultisig implements Contract {
         }
     }
 
+    async getProxyCode(provider: ContractProvider): Promise<Cell> {
+        const result = await provider.get('get_full_data', [])
+        result.stack.readNumber()
+        result.stack.readNumber()
+        result.stack.readNumber()
+        result.stack.readCell()
+        result.stack.readCell()
+        result.stack.readAddress()
+
+        return result.stack.readCell()
+    }
+
+    async getPoolCode(provider: ContractProvider): Promise<Cell> {
+        const result = await provider.get('get_full_data', [])
+        result.stack.readNumber()
+        result.stack.readNumber()
+        result.stack.readNumber()
+        result.stack.readCell()
+        result.stack.readCell()
+        result.stack.readAddress()
+        result.stack.readCell()
+
+        return result.stack.readCell()
+    }
+
     async getPublicKeys(provider: ContractProvider): Promise<Dictionary<number, Buffer>> {
         const result = await provider.get('get_public_keys', [])
         return result.stack.readCell().asSlice().loadDictDirect(
             Dictionary.Keys.Uint(8),
             Dictionary.Values.Buffer(32)
         );
-    }
-
-    async getCompletedQueries(provider: ContractProvider): Promise<Cell | null> {
-        const result = await provider.get('get_full_data', [])
-        result.stack.readNumber()
-        result.stack.readNumber()
-        result.stack.readNumber()
-        result.stack.readCell()
-
-        return result.stack.readCellOpt()
     }
 
     async getPoolAndProxyAddresses(

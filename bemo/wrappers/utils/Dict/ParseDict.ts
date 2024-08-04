@@ -1,4 +1,4 @@
-import {Slice} from "ton-core";
+import {Slice} from "@ton/core";
 
 function readUnaryLength(slice: Slice) {
     let res = 0;

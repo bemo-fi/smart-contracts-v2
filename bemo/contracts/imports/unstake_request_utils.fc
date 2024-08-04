@@ -1,0 +1,43 @@
+;; =============== unstake request utils =============================
+cell pack_unstake_request_data(int index, slice financial_address, slice owner_address, int ton_amount, int jetton_amount, cell forward_payload, int unlock_timestamp) inline {
+    return begin_cell()
+    .store_uint(index, 64)
+    .store_slice(financial_address)
+    .store_slice(owner_address)
+    .store_coins(ton_amount)
+    .store_coins(jetton_amount)
+    .store_maybe_ref(forward_payload)
+    .store_uint(unlock_timestamp, 32)
+    .end_cell();
+}
+
+cell calculate_unstake_request_state_init(int index, slice financial_address, cell unstake_request_code) inline {
+    return begin_cell()
+    .store_uint(0, 2) ;; 0b00 - No split_depth; No special
+    .store_maybe_ref(unstake_request_code)
+    .store_maybe_ref(
+        pack_unstake_request_data(
+            index,
+            financial_address,
+            address_none(),
+            0,
+            0,
+            null(),
+            0
+        )
+    )
+    .store_uint(0, 1)
+    .end_cell();
+}
+
+slice calculate_unstake_request_address(cell state_init) inline {
+    return begin_cell().store_uint(4, 3) ;; 0b100 = addr_std$10 tag; No anycast
+    .store_int(BASECHAIN, 8)
+    .store_uint(cell_hash(state_init), 256)
+    .end_cell()
+    .begin_parse();
+}
+
+slice calculate_index_unstake_request_address(int index, slice financial_address, cell unstake_request_code) inline {
+    return calculate_unstake_request_address(calculate_unstake_request_state_init(index, financial_address, unstake_request_code));
+}

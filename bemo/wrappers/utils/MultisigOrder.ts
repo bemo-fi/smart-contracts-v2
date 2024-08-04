@@ -1,5 +1,5 @@
-import { sign, signVerify } from 'ton-crypto';
-import { beginCell, Cell } from 'ton-core';
+import { sign, signVerify } from '@ton/crypto';
+import { beginCell, Cell } from '@ton/core';
 
 export function getOrderByPayload(payload: Cell, walletId: number = 0, queryOffset: number = 7200){
     const time = BigInt(Math.floor(Date.now() / 1000 + queryOffset));
@@ -53,17 +53,17 @@ export class MultisigOrder {
         let order = new MultisigOrder(messagesCell);
 
         if (signatures) {
-            while (signatures.remainingBits > 0) {
-                const signature = signatures.loadBuffer(64);
-                const ownerId = signatures.loadUint(8);
+            while (signatures?.remainingBits > 0) {
+                const signature = signatures?.loadBuffer(64);
+                const ownerId = signatures?.loadUint(8);
                 order.signatures[ownerId] = signature;
-                if (signatures.remainingRefs > 0) {
-                    signatures = signatures.loadRef().asSlice();
+                if (signatures?.remainingRefs > 0) {
+                    signatures = signatures?.loadRef().asSlice();
                 } else {
-                    signatures.skip(1);
+                    signatures?.skip(1);
                 }
             }
-            signatures.endParse();
+            signatures?.endParse();
         }
 
         return order;

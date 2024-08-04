@@ -1,7 +1,7 @@
-import { NetworkProvider} from "@ton-community/blueprint";
+import { NetworkProvider} from "@ton/blueprint";
 import {mnemonicToPrivateKey} from "ton-crypto";
 import {TransactionMultisig} from "../wrappers/TransactionMultisig";
-import {Address, toNano} from "ton-core";
+import {Address} from "@ton/core";
 import {getOrderByPayload} from "../wrappers/utils/MultisigOrder";
 import {getSendTonFromFinancialPayload} from "../wrappers/utils/TransactionMultisigUtils";
 

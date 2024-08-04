@@ -1,5 +1,5 @@
-import { CompilerConfig } from '@ton-community/blueprint';
+import { CompilerConfig } from '@ton/blueprint';
 
 export const compile: CompilerConfig = {
-    targets: ['contracts/imports/stdlib_for_pool.fc', 'contracts/nominator_pool.fc'],
+    targets: ['contracts/imports/stdlib.fc', 'contracts/nominator_pool.fc'],
 };

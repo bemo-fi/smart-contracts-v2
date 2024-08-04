@@ -4,11 +4,12 @@ import {
     Cell,
     Contract,
     contractAddress,
-    ContractProvider, fromNano,
+    ContractProvider,
+    fromNano,
     Sender,
     SendMode,
     toNano
-} from "ton-core";
+} from "@ton/core";
 import {
     buildJettonOnchainMetadata,
     JettonMetadata,
@@ -16,6 +17,7 @@ import {
     persistenceType,
     readJettonMetadata
 } from "./utils/ContentUtils";
+import {StorageStats} from "../tests/GasUtils";
 
 export interface FinancialData {
     jettonTotalSupply: number;
@@ -58,9 +60,11 @@ export type FinancialConfig = {
 
 export const FinancialOpcodes = {
     mint: 0,
+    stake: 0x4253c4d5,
     receiveTonWithReward: 1,
     burnNotification: 0x7bdd97de,
     unstake: 10,
+    unstakeNotification: 0x90c80a07,
     getPools: 14,
     provideWalletAddress: 0x2c76b973,
     changeAdmin: 2,
@@ -74,10 +78,12 @@ export const FinancialOpcodes = {
     refreshLockupConfig: 11,
     deployUnstakeRequest: 100,
     returnUnstakeRequest: 101,
+    updateUnstakeRequestCode: 90,
     updateCode: 5000,
     transferJetton: 0xf8a7ea5,
     provideQuote: 0xad83913f,
-    takeQuote: 0xa420458
+    takeQuote: 0xa420458,
+    takeWalletAddress: 0xd1735400,
 }
 
 export const FinancialErrors = {
@@ -116,17 +122,24 @@ export function financialConfigToCell(config: FinancialConfig): Cell {
         .storeRef(buildJettonOnchainMetadata(config.content))
         .storeRef(config.jettonWalletCode)
         .storeRef(beginCell()
-            .storeInt(config.lastLockupEpoch ?? 0, 32)
+            .storeUint(config.lastLockupEpoch ?? 0, 32)
             .storeCoins(config.lockupSupply ? toNano(config.lockupSupply.toString()) : 0)
             .storeCoins(config.nextLockupSupply ? toNano(config.nextLockupSupply.toString()) : 0)
             .storeCoins(config.laterLockupSupply ? toNano(config.laterLockupSupply.toString()) : 0)
-            .storeInt(config.nextUnstakeRequestIndex ?? 0, 64)
+            .storeUint(config.nextUnstakeRequestIndex ?? 0, 64)
             .storeRef(config.unstakeRequestCode)
             .endCell())
         .endCell();
 }
 
 export class Financial implements Contract {
+
+    static storageStats = new StorageStats(26889, 57);
+
+    static stakeGas = 11382n
+    static burnNotificationGas = 15293n
+    static unstakeGas = 12116n
+
     constructor(
         readonly address: Address,
         readonly init?: { code: Cell, data: Cell },
@@ -163,6 +176,23 @@ export class Financial implements Contract {
         })
     }
 
+    async sendStake(provider: ContractProvider, via: Sender, value: bigint, opts:{
+        queryId?: number;
+        forwardAmount: number;
+        forwardPayload: Cell | null;
+    }) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(FinancialOpcodes.stake, 32)
+                .storeUint(opts.queryId ?? 0, 64)
+                .storeCoins(toNano(opts.forwardAmount.toFixed(9)))
+                .storeMaybeRef(opts.forwardPayload)
+                .endCell(),
+        })
+    }
+
     async sendTonWithReward(
         provider: ContractProvider,
         via: Sender, value: bigint,
@@ -186,7 +216,9 @@ export class Financial implements Contract {
         opts: {
             queryId?: number;
             withdrawJettonAmount: number;
-            fromAddress: string
+            fromAddress: string;
+            receiverAddress?: string;
+            customData?: Cell;
         }
     ) {
         await provider.internal(via, {
@@ -197,6 +229,8 @@ export class Financial implements Contract {
                 .storeUint(opts.queryId || 0, 64)
                 .storeCoins(opts.withdrawJettonAmount)
                 .storeAddress(Address.parse(opts.fromAddress))
+                .storeAddress(Address.parse(opts?.receiverAddress ? opts.receiverAddress : opts.fromAddress))
+                .storeMaybeRef(opts.customData)
                 .endCell(),
         })
     }
@@ -209,6 +243,7 @@ export class Financial implements Contract {
             ownerAddress: string;
             withdrawTonAmount: number;
             withdrawJettonAmount: number;
+            forwardPayload?: Cell;
         }
     ) {
         await provider.internal(via, {
@@ -220,6 +255,7 @@ export class Financial implements Contract {
                 .storeAddress(Address.parse(opts.ownerAddress))
                 .storeCoins(toNano(opts.withdrawTonAmount.toString()))
                 .storeCoins(toNano(opts.withdrawJettonAmount.toString()))
+                .storeMaybeRef(opts.forwardPayload)
                 .endCell(),
         })
     }
@@ -242,6 +278,28 @@ export class Financial implements Contract {
                 .storeUint(FinancialOpcodes.refreshLockupConfig, 32)
                 .endCell(),
         })
+    }
+
+    async sendDiscovery(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint = toNano('0.1'),
+        opts: {
+            queryId?: number;
+            owner: string,
+            includeAddress: boolean,
+        }
+    ) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(FinancialOpcodes.provideWalletAddress, 32)
+                .storeUint(opts.queryId ?? 0, 64) // op, queryId
+                .storeAddress(Address.parse(opts.owner))
+                .storeBit(opts.includeAddress)
+                .endCell(),
+            value: value,
+        });
     }
 
     async sendChangeAdmin(
@@ -370,19 +428,15 @@ export class Financial implements Contract {
             payload?: Cell
         }
     ) {
-        let body = beginCell()
-            .storeUint(FinancialOpcodes.sendTon, 32)
-            .storeAddress(Address.parse(opts.destinationAddress))
-            .storeCoins(toNano(opts.amount.toString()))
-
-        if (opts.payload) {
-            body.storeRef(opts.payload)
-        }
-
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: body.endCell(),
+            body: beginCell()
+                .storeUint(FinancialOpcodes.sendTon, 32)
+                .storeAddress(Address.parse(opts.destinationAddress))
+                .storeCoins(toNano(opts.amount.toString()))
+                .storeMaybeRef(opts.payload)
+                .endCell(),
         })
     }
 
@@ -432,9 +486,9 @@ export class Financial implements Contract {
     async getFinancialData(provider: ContractProvider): Promise<FinancialData> {
         const result = await provider.get('get_full_data', [])
 
-        const jettonTotalSupply = Number(fromNano(result.stack.readNumber()))
-        const tonTotalSupply = Number(fromNano(result.stack.readNumber()))
-        const commissionTotalSupply = Number(fromNano(result.stack.readNumber()))
+        const jettonTotalSupply = Number(fromNano(result.stack.readBigNumber()))
+        const tonTotalSupply = Number(fromNano(result.stack.readBigNumber()))
+        const commissionTotalSupply = Number(fromNano(result.stack.readBigNumber()))
         const commissionFactor = result.stack.readNumber()
         const commissionAddress = result.stack.readAddressOpt()?.toString()
         const adminAddress = result.stack.readAddressOpt()?.toString()
@@ -443,9 +497,9 @@ export class Financial implements Contract {
         const jettonWalletCode = result.stack.readCell()
         const unstakeRequestCode = result.stack.readCell()
         const lastLockupEpoch = result.stack.readNumber()
-        const lockupSupply = Number(fromNano(result.stack.readNumber()))
-        const nextLockupSupply = Number(fromNano(result.stack.readNumber()))
-        const laterLockupSupply = Number(fromNano(result.stack.readNumber()))
+        const lockupSupply = Number(fromNano(result.stack.readBigNumber()))
+        const nextLockupSupply = Number(fromNano(result.stack.readBigNumber()))
+        const laterLockupSupply = Number(fromNano(result.stack.readBigNumber()))
         const nextUnstakeRequestIndex = result.stack.readNumber()
 
         const jettonContent = await readJettonMetadata(contentCell);
@@ -474,6 +528,11 @@ export class Financial implements Contract {
             laterLockupSupply,
             nextUnstakeRequestIndex
         }
+    }
+
+    async getTotalSupply(provider: ContractProvider) {
+        const result = await provider.get('get_full_data', [])
+        return result.stack.readBigNumber();
     }
 
     async getWalletAddress(provider: ContractProvider, address: string): Promise<Address> {

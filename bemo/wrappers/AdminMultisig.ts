@@ -7,9 +7,8 @@ import {
     ContractProvider,
     Dictionary,
     Sender,
-    SendMode, Slice
-} from 'ton-core';
-import {Buffer} from "buffer";
+    SendMode
+} from '@ton/core';
 import {buildJettonOnchainMetadata, JettonMetadata, readJettonMetadata} from "./utils/ContentUtils";
 import {MultisigOrder} from "./utils/MultisigOrder";
 import {sign} from "ton-crypto";
@@ -90,7 +89,7 @@ export function adminMultisigConfigToCell(config: AdminMultisigConfig): Cell {
 
     let tempCell = beginCell()
     if (config.tempConfig?.adminMultisigAddress) {
-        tempCell.storeAddress(Address.parse(config.tempConfig?.adminMultisigAddress))
+        tempCell.storeAddress(Address.parse(config.tempConfig.adminMultisigAddress))
     } else {
         tempCell.storeSlice(addressNone)
     }
@@ -98,7 +97,7 @@ export function adminMultisigConfigToCell(config: AdminMultisigConfig): Cell {
     tempCell.storeUint(config.tempConfig?.changingAdminMultisigTime || 0n, 32)
 
     if (config.tempConfig?.transactionMultisigAddress) {
-        tempCell.storeAddress(Address.parse(config.tempConfig?.transactionMultisigAddress))
+        tempCell.storeAddress(Address.parse(config.tempConfig.transactionMultisigAddress))
     } else {
         tempCell.storeSlice(addressNone)
     }
@@ -106,7 +105,7 @@ export function adminMultisigConfigToCell(config: AdminMultisigConfig): Cell {
     tempCell.storeUint(config.tempConfig?.changingTransactionMultisigTime || 0n, 32)
 
     tempCell
-        .storeInt(config.tempConfig?.commissionFactor != undefined ? config.tempConfig?.commissionFactor : -1n, 16)
+        .storeInt(config.tempConfig?.commissionFactor != undefined ? config.tempConfig.commissionFactor : -1n, 16)
         .storeUint(config.tempConfig?.changingCommissionTime || 0n, 32)
 
     if (config.tempConfig?.commissionAddress) {
@@ -239,16 +238,6 @@ export class AdminMultisig implements Contract {
             Dictionary.Keys.Uint(8),
             Dictionary.Values.Buffer(32)
         );
-    }
-
-    async getPendingQueries(provider: ContractProvider): Promise<Cell | null> {
-        const result = await provider.get('get_full_data', [])
-        result.stack.readNumber()
-        result.stack.readNumber()
-        result.stack.readNumber()
-        result.stack.readCell()
-
-        return result.stack.readCellOpt()
     }
 
     async getOwnerFlood(provider: ContractProvider, address: string): Promise<OwnerFlood> {

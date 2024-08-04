@@ -1,9 +1,8 @@
-import {Blockchain, SandboxContract, TreasuryContract} from '@ton-community/sandbox'
-import {Address, beginCell, Cell, fromNano, toNano} from 'ton-core'
+import {Blockchain, SandboxContract, TreasuryContract} from '@ton/sandbox'
+import {Address, beginCell, Cell, fromNano, toNano} from '@ton/core'
 import {NominatorProxy, NominatorProxyErrors} from '../wrappers/NominatorProxy'
-import '@ton-community/test-utils'
-import {compile} from '@ton-community/blueprint'
-import now = jest.now;
+import '@ton/test-utils'
+import {compile} from '@ton/blueprint'
 import {NominatorPool} from "../wrappers/NominatorPool";
 
 describe('NominatorProxy', () => {
@@ -207,7 +206,7 @@ describe('NominatorProxy', () => {
     })
 
     it('[from anyone] should throw an error because 10 hours have not passed', async () => {
-        const depositTime = Math.floor(now() / 1000) // now
+        const depositTime = Math.floor(Date.now() / 1000) // now
         await nominatorProxy.sendTonToNominatorProxy(financial.getSender(), toNano(20001))
         const initialProxyData = await nominatorProxy.getProxyData()
         expect(initialProxyData.depositTime).toBe(depositTime)
@@ -336,7 +335,7 @@ describe('NominatorProxy', () => {
     })
 
     it('[from anyone] should pass without errors and request should be sent to pool for withdrawal', async () => {
-        const depositTime = Math.floor(now() / 1000) - 60 * 60 * 10 // now - 10 hours
+        const depositTime = Math.floor(Date.now() / 1000) - 60 * 60 * 10 // now - 10 hours
         const nominatorProxy1 = blockchain.openContract(await NominatorProxy.createFromConfig({
             depositAmount: 20000,
             depositTime: depositTime,
@@ -419,7 +418,7 @@ describe('NominatorProxy', () => {
         })
 
         const depositAmount = toNano(20001)
-        const depositTime = Math.floor(now() / 1000)
+        const depositTime = Math.floor(Date.now() / 1000)
         blockchain.now = depositTime
         await nominatorProxy1.sendTonToNominatorProxy(financial.getSender(), depositAmount)
         const initialProxyData = await nominatorProxy1.getProxyData()
@@ -497,7 +496,7 @@ describe('NominatorProxy', () => {
     })
 
     it('[from anyone] error should be thrown when withdraw is requested again and a 15 minutes has not passed', async () => {
-        const depositTime = Math.floor(now() / 1000) - 60 * 60 * 10 // now - 10 hours
+        const depositTime = Math.floor(Date.now() / 1000) - 60 * 60 * 10 // now - 10 hours
         const nominatorProxy1 = blockchain.openContract(await NominatorProxy.createFromConfig({
             depositAmount: 20000,
             depositTime: depositTime,
@@ -522,7 +521,7 @@ describe('NominatorProxy', () => {
         const tonAmount = toNano(2)
 
         await nominatorProxy1.sendTonToNominatorProxy(anyone.getSender(), tonAmount)
-        const withdrawTime = Math.floor(now() / 1000)
+        const withdrawTime = Math.floor(Date.now() / 1000)
 
         const proxyData = await nominatorProxy1.getProxyData()
         expect(proxyData.withdrawnTime).toBe(withdrawTime)
@@ -583,8 +582,8 @@ describe('NominatorProxy', () => {
     it('[from anyone] should send msg to pool for withdrawal when withdrawal was requested but a 15 minutes has passed', async () => {
 
         const anyone0 = await blockchain.treasury('anyone0')
-        const depositTime = Math.floor(now() / 1000) - 60 * 60 * 10 // now - 10 hours
-        const withdrawnTime = Math.floor(now() / 1000) - 15 * 60 // now - 15 minutes
+        const depositTime = Math.floor(Date.now() / 1000) - 60 * 60 * 10 // now - 10 hours
+        const withdrawnTime = Math.floor(Date.now() / 1000) - 15 * 60 // now - 15 minutes
         const nominatorProxy1 = blockchain.openContract(await NominatorProxy.createFromConfig({
             depositAmount: 20000,
             depositTime: depositTime,
@@ -680,8 +679,8 @@ describe('NominatorProxy', () => {
 
     it('[from nominator pool] should send ton to financial (with reward)', async () => {
         const deployer1 = await blockchain.treasury('deployer1')
-        const depositTime = Math.floor(now() / 1000) - 60 * 60 * 10 // now - 10 hours
-        const withdrawTime = Math.floor(now() / 1000) // now
+        const depositTime = Math.floor(Date.now() / 1000) - 60 * 60 * 10 // now - 10 hours
+        const withdrawTime = Math.floor(Date.now() / 1000) // now
         const nominatorProxy1 = blockchain.openContract(await NominatorProxy.createFromConfig({
             depositAmount: 20000,
             depositTime: depositTime,
@@ -722,9 +721,9 @@ describe('NominatorProxy', () => {
             value: (x) => {
                 return x! <= tonAmount
             },
-            body: (x) => {
-                const op = x.beginParse().loadUint(32)
-                const reward = x.beginParse().skip(32).loadCoins()
+            body: (x: Cell | undefined) => {
+                const op = x!.beginParse().loadUint(32)
+                const reward = x!.beginParse().skip(32).loadCoins()
                 return op == 1 && 0 < reward && reward <= tonAmount
             },
             success: true
@@ -736,8 +735,8 @@ describe('NominatorProxy', () => {
 
     it('[from nominator pool] should send ton to financial (reward = 0)', async () => {
         const deployer1 = await blockchain.treasury('deployer1')
-        const depositTime = Math.floor(now() / 1000) - 60 * 60 * 10 // now - 10 hours
-        const withdrawTime = Math.floor(now() / 1000) // now
+        const depositTime = Math.floor(Date.now() / 1000) - 60 * 60 * 10 // now - 10 hours
+        const withdrawTime = Math.floor(Date.now() / 1000) // now
         const nominatorProxy1 = blockchain.openContract(await NominatorProxy.createFromConfig({
             depositAmount: 20000,
             depositTime: depositTime,
@@ -788,7 +787,7 @@ describe('NominatorProxy', () => {
 
     it('[from nominator pool] should send ton to financial (not withdrawal)', async () => {
         const deployer1 = await blockchain.treasury('deployer1')
-        const depositTime = Math.floor(now() / 1000) - 60 * 60 * 10 // now - 10 hours
+        const depositTime = Math.floor(Date.now() / 1000) - 60 * 60 * 10 // now - 10 hours
         const nominatorProxy1 = blockchain.openContract(await NominatorProxy.createFromConfig({
             depositAmount: 20000,
             depositTime: depositTime,
@@ -833,8 +832,8 @@ describe('NominatorProxy', () => {
 
     it('[from nominator pool] should send ton to the last address that requested the withdrawal', async () => {
         const deployer1 = await blockchain.treasury('deployer1')
-        const depositTime = Math.floor(now() / 1000) - 60 * 60 * 10 // now - 10 hours
-        const withdrawTime = Math.floor(now() / 1000)// now
+        const depositTime = Math.floor(Date.now() / 1000) - 60 * 60 * 10 // now - 10 hours
+        const withdrawTime = Math.floor(Date.now() / 1000)// now
         const nominatorProxy1 = blockchain.openContract(await NominatorProxy.createFromConfig({
             depositAmount: 20000,
             depositTime: depositTime,

@@ -1,0 +1,36 @@
+#include "precompiled_gas_const.fc";
+
+int get_ton_amount_for_stake(int forward_ton_amount, int fwd_fee) impure inline {
+    int fwd_count = forward_ton_amount ? 2 : 1; ;; second sending (forward) will be cheaper that first
+
+    int jetton_wallet_gas_consumption = get_precompiled_gas_consumption();
+    int stake_gas_consumption = null?(jetton_wallet_gas_consumption) ? STAKE_GAS_CONSUMPTION : jetton_wallet_gas_consumption;
+    int receive_transfer_gas_consumption = null?(jetton_wallet_gas_consumption) ? RECEIVE_TRANSFER_GAS_CONSUMPTION : jetton_wallet_gas_consumption;
+
+    return forward_ton_amount +
+    ;; 3 messages: fin->wal, wal->owner, wal->response
+    ;; but last one is optional (it is ok if it fails)
+    fwd_count * fwd_fee +
+    jetton_wallet_forward_init_state_overhead() + ;; additional fwd fees related to initstate in internal_transfer
+    get_compute_fee(BASECHAIN, stake_gas_consumption) +
+    get_compute_fee(BASECHAIN, receive_transfer_gas_consumption) +
+    calculate_jetton_wallet_min_storage_fee();
+}
+
+int get_ton_amount_for_burn_notification(cell forward_payload, int fwd_fee) impure inline {
+    return
+        ;; 3 messages: financial->unstake_request, unstake_request->financial, financial->user
+        3 * fwd_fee +
+        get_compute_fee(BASECHAIN, BURN_NOTIFICATION_GAS_CONSUMPTION) +
+        get_compute_fee(BASECHAIN, DEPLOY_UNSTAKE_REQUEST_GAS_CONSUMPTION) +
+        calculate_unstake_request_min_storage_fee(forward_payload) +
+        get_compute_fee(BASECHAIN, UNSTAKE_GAS_CONSUMPTION) +
+        calculate_financial_min_storage_fee();
+}
+
+int get_ton_amount_for_unstake(int fwd_fee) impure inline {
+    return
+        ;; 1 message: financial->user
+        fwd_fee +
+        get_compute_fee(BASECHAIN, UNSTAKE_GAS_CONSUMPTION);
+}

@@ -1,0 +1,82 @@
+const MIN_FINANCIAL_STORAGE_DURATION = 1 * 365 * 24 * 3600; ;; 1 year
+const MIN_JETTON_WALLET_STORAGE_DURATION = 5 * 365 * 24 * 3600; ;; 5 years
+const MIN_UNSTAKE_REQUEST_STORAGE_DURATION = 3 * 30 * 24 * 3600; ;; 3 mouth
+
+;;# Precompiled constants
+;;
+;;All of the contents are result of contract emulation tests
+;;
+
+;;## Storage
+;;
+;;Get calculated in a separate test file [/tests/StateInit.spec.ts](StateInit.spec.ts)
+
+;;- `JETTON_WALLET_BITS` [/tests/StateInit.spec.ts#L123](L123)
+const JETTON_WALLET_BITS  = 941;
+;;- `JETTON_WALLET_CELLS`: [/tests/StateInit.spec.ts#L123](L123)
+const JETTON_WALLET_CELLS = 3;
+
+;; difference in JETTON_WALLET_BITS/JETTON_WALLET_INITSTATE_BITS is difference in
+;; StateInit and AccountStorage (https://github.com/ton-blockchain/ton/blob/master/crypto/block/block.tlb)
+;; we count bits as if balances are max possible
+;;- `JETTON_WALLET_INITSTATE_BITS` [/tests/StateInit.spec.ts#L126](L126)
+const JETTON_WALLET_INITSTATE_BITS  = 847;
+;;- `JETTON_WALLET_INITSTATE_CELLS` [/tests/StateInit.spec.ts#L126](L126)
+const JETTON_WALLET_INITSTATE_CELLS = 3;
+
+;;- `UNSTAKE_REQUEST_MIN_BITS` [/tests/StateInit.spec.ts#L179](L179)
+const UNSTAKE_REQUEST_MIN_BITS  = 1090;
+;;- `UNSTAKE_REQUEST_MIN_CELLS`: [/tests/StateInit.spec.ts#L179](L179)
+const UNSTAKE_REQUEST_MIN_CELLS = 3;
+
+;;- `FINANCIAL_BITS` [/tests/StateInit.spec.ts#L95](L95)
+const FINANCIAL_BITS  = 26889;
+;;- `FINANCIAL_CELLS`: [/tests/StateInit.spec.ts#L95](L95)
+const FINANCIAL_CELLS = 57;
+
+;;## Gas
+;;
+;;Gas constants are calculated in the main test suite.
+;;First the related transaction is found, and then it's
+;;resulting gas consumption is printed to the console.
+
+;;- `SEND_TRANSFER_GAS_CONSUMPTION` [/tests/JettonWallet.spec.ts#L462](L462)
+const SEND_TRANSFER_GAS_CONSUMPTION    = 9371;
+
+;;- `RECEIVE_TRANSFER_GAS_CONSUMPTION` [/tests/JettonWallet.spec.ts#L471](L471)
+const RECEIVE_TRANSFER_GAS_CONSUMPTION = 10185;
+
+;;- `BURN_GAS_CONSUMPTION` [/tests/JettonWallet.spec.ts#L250](L250)
+const BURN_GAS_CONSUMPTION    = 7671;
+
+;;- `STAKE_GAS_CONSUMPTION` [/tests/Financial.spec.ts#L506](L506)
+const STAKE_GAS_CONSUMPTION    = 11382;
+
+;;- `BURN_NOTIFICATION_GAS_CONSUMPTION` [/tests/Financial.spec.ts#L1829](L1829)
+const BURN_NOTIFICATION_GAS_CONSUMPTION    = 15293;
+
+;;- `DEPLOY_UNSTAKE_REQUEST_GAS_CONSUMPTION` [/tests/Financial.spec.ts#L1830](L1830)
+const DEPLOY_UNSTAKE_REQUEST_GAS_CONSUMPTION    = 4186;
+
+;;- `UNSTAKE_GAS_CONSUMPTION` [/tests/Financial.spec.ts#L2240](L2240)
+const UNSTAKE_GAS_CONSUMPTION    = 12116;
+
+;;- `UNSTAKE_REQUEST_GAS_CONSUMPTION` [/tests/UnstakeRequest.spec.ts#L299](L299)
+const UNSTAKE_REQUEST_GAS_CONSUMPTION    = 7734;
+
+int calculate_jetton_wallet_min_storage_fee() inline {
+    return get_storage_fee(BASECHAIN, MIN_JETTON_WALLET_STORAGE_DURATION, JETTON_WALLET_BITS, JETTON_WALLET_CELLS);
+}
+
+int calculate_financial_min_storage_fee() inline {
+    return get_storage_fee(BASECHAIN, MIN_FINANCIAL_STORAGE_DURATION, FINANCIAL_BITS, FINANCIAL_CELLS);
+}
+
+int calculate_unstake_request_min_storage_fee(cell forward_payload) inline {
+    var (forward_payload_cells, forward_payload_bits, _) = compute_data_size(forward_payload, 8192);
+    return get_storage_fee(BASECHAIN, MIN_UNSTAKE_REQUEST_STORAGE_DURATION, UNSTAKE_REQUEST_MIN_BITS + forward_payload_bits, UNSTAKE_REQUEST_MIN_CELLS + forward_payload_cells);
+}
+
+int jetton_wallet_forward_init_state_overhead() inline {
+    return get_simple_forward_fee(BASECHAIN, JETTON_WALLET_INITSTATE_BITS, JETTON_WALLET_INITSTATE_CELLS);
+}

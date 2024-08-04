@@ -1,10 +1,9 @@
-import {Address, beginCell, Cell, toNano} from "ton-core";
+import {Address, beginCell, Cell, toNano} from "@ton/core";
 
 
 export const TransactionMultisigOpcodes = {
     deposit: 0,
-    returnTon: 9,
-    forceQueueClearing: 10
+    returnTon: 9
 }
 
 export function getSendTonFromFinancialPayload(
@@ -35,11 +34,5 @@ export function getReturnTonPayload(destinationAddress: string): Cell {
     return beginCell()
         .storeUint(TransactionMultisigOpcodes.returnTon, 32)
         .storeAddress(Address.parse(destinationAddress))
-        .endCell()
-}
-
-export function getForceQueueClearing(): Cell {
-    return beginCell()
-        .storeUint(TransactionMultisigOpcodes.forceQueueClearing, 32)
         .endCell()
 }

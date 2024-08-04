@@ -1,4 +1,4 @@
-import {Slice} from "ton-core";
+import {Slice} from "@ton/core";
 import {parseDict} from "./ParseDict";
 
 export class SliceDict extends Slice{

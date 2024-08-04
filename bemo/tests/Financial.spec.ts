@@ -1,11 +1,19 @@
-import {Blockchain, SandboxContract, TreasuryContract} from '@ton-community/sandbox'
-import {Address, beginCell, Cell, fromNano, toNano} from 'ton-core'
+import {Blockchain, internal, SandboxContract, TreasuryContract} from '@ton/sandbox'
+import {Address, beginCell, Cell, Dictionary, fromNano, toNano} from '@ton/core'
 import {Financial, FinancialErrors, FinancialOpcodes} from '../wrappers/Financial'
-import '@ton-community/test-utils'
-import {compile} from '@ton-community/blueprint'
-import {JettonWallet} from "../wrappers/JettonWallet";
+import '@ton/test-utils'
+import {compile} from '@ton/blueprint'
+import {JettonWallet, JettonWalletOpCodes} from "../wrappers/JettonWallet";
 import {UnstakeRequest} from "../wrappers/UnstakeRequest";
-import now = jest.now;
+import {
+    calcStorageFee,
+    computeFwdFees,
+    computeGasFee, computeMessageForwardFees,
+    getGasPrices,
+    getMsgPrices, getStoragePrices,
+    MsgPrices, printTxGasStats, StorageStats,
+} from "./GasUtils";
+import {findTransactionRequired, randomAddress} from "@ton/test-utils";
 
 describe('Financial', () => {
     let code: Cell
@@ -17,10 +25,80 @@ describe('Financial', () => {
     let commissionWallet: SandboxContract<TreasuryContract>
     let financial: SandboxContract<Financial>
 
+    const stakeNotificationAmount = toNano('0.01')
+
+    function getMintFee(fwdAmount: bigint, fwdPayload: Cell | null, customPayload: Cell | null, withFwdFee: boolean): bigint {
+        const msgPrices = getMsgPrices(blockchain.config, 0)
+        const gasPrices = getGasPrices(blockchain.config, 0)
+
+        const calcSendFees = (
+            stake_fee: bigint,
+            recv_fee: bigint,
+            fwd_fee: bigint,
+            fwd_amount: bigint,
+            storage_fee: bigint,
+            state_init?: bigint
+        ) => {
+            const fwd_count = fwd_amount > 0n ? 2n : 1n;
+            const overhead = state_init || defaultOverhead;
+            return fwd_amount + fwd_count * fwd_fee + overhead + stake_fee + recv_fee + storage_fee;
+        }
+
+        const estimateTransferFwd = (
+            fwd_amount: bigint,
+            fwd_payload: Cell | null,
+            custom_payload: Cell | null,
+            prices?: MsgPrices
+        ) => {
+            // Purpose is to account for the first biggest one fwd fee.
+            // So, we use fwd_amount here only for body calculation
+
+            const mockFrom = randomAddress(0);
+            const mockTo = randomAddress(0);
+            const mockJettonAmount = toNano(100);
+
+            const body = JettonWallet.transferMessage(mockJettonAmount, mockTo,
+                mockFrom, customPayload,
+                fwdAmount, fwdPayload);
+
+            const curPrices = prices || msgPrices;
+            const mockAddr = new Address(0, Buffer.alloc(32, 'A'));
+            const testMsg = internal({
+                from: mockAddr,
+                to: mockAddr,
+                value: toNano('1'),
+                body
+            });
+            const feesRes = computeMessageForwardFees(curPrices, testMsg);
+            // @ts-ignore
+            return feesRes.fees.total;
+        }
+
+        const forwardOverhead = (prices: MsgPrices, stats: StorageStats) => {
+            // Meh, kinda lazy way of doing that, but tests are bloated enough already
+            return computeFwdFees(prices, stats.cells, stats.bits) - prices.lumpPrice;
+        }
+
+        const defaultOverhead = forwardOverhead(msgPrices, JettonWallet.stateInitStats);
+        const storagePrices = getStoragePrices(blockchain.config);
+        const storageDuration = 5 * 365 * 24 * 3600;
+
+        const fwdFee = estimateTransferFwd(fwdAmount, fwdPayload, customPayload)
+        const stake_gas_fee = computeGasFee(gasPrices, Financial.stakeGas)
+        const receive_gas_fee = computeGasFee(gasPrices, JettonWallet.receiveGas)
+        const min_tons_for_jetton_wallet_storage = calcStorageFee(storagePrices, JettonWallet.storageStats, BigInt(storageDuration));
+
+        return calcSendFees(
+            stake_gas_fee,
+            receive_gas_fee,
+            withFwdFee ? fwdFee : 0n,
+            fwdAmount,
+            min_tons_for_jetton_wallet_storage
+        );
+    }
+
     beforeAll(async () => {
         code = await compile('Financial')
-        jettonWalletCode = await compile('JettonWallet')
-        unstakeRequestCode = await compile('UnstakeRequest')
     })
 
     beforeEach(async () => {
@@ -29,6 +107,22 @@ describe('Financial', () => {
         admin = await blockchain.treasury('admin')
         transactionAdmin = await blockchain.treasury('transactionAdmin')
         commissionWallet = await blockchain.treasury('commissionAddress')
+
+        const jettonWalletCodeRaw = await compile('JettonWallet')
+        const unstakeRequestCodeRaw = await compile('UnstakeRequest')
+
+        //jwallet_code is library
+        const _libs = Dictionary.empty(Dictionary.Keys.BigUint(256), Dictionary.Values.Cell());
+        _libs.set(BigInt(`0x${jettonWalletCodeRaw.hash().toString('hex')}`), jettonWalletCodeRaw);
+        _libs.set(BigInt(`0x${unstakeRequestCodeRaw.hash().toString('hex')}`), unstakeRequestCodeRaw);
+        blockchain.libs = beginCell().storeDictDirect(_libs).endCell();
+
+        let lib_jetton_prep = beginCell().storeUint(2, 8).storeBuffer(jettonWalletCodeRaw.hash()).endCell();
+        jettonWalletCode = new Cell({exotic: true, bits: lib_jetton_prep.bits, refs: lib_jetton_prep.refs});
+
+        let lib_unstake_prep = beginCell().storeUint(2, 8).storeBuffer(unstakeRequestCodeRaw.hash()).endCell();
+        unstakeRequestCode = new Cell({exotic: true, bits: lib_unstake_prep.bits, refs: lib_unstake_prep.refs});
+
         financial = blockchain.openContract(await Financial.createFromConfig({
             commissionAddress: commissionWallet.address.toString(),
             adminAddress: admin.address.toString(),
@@ -133,7 +227,6 @@ describe('Financial', () => {
         const anyone = await blockchain.treasury('anyone')
 
         const reward = 1000
-        const depositFee = 0.05;
         await financial.sendTonWithReward(anyone.getSender(), toNano(1000), {reward})
 
         const anyoneJettonWalletAddress = await financial.getWalletAddress(anyone.address.toString())
@@ -143,36 +236,69 @@ describe('Financial', () => {
         expect(initialFinancialData.tonTotalSupply).toBe(1 + reward - commission)
         expect(initialFinancialData.jettonTotalSupply).toBe(1)
         expect(initialFinancialData.commissionTotalSupply).toBe(commission)
-
         const stakeAmount = 10000
-        const tonAmount = toNano((stakeAmount + depositFee).toString())
+
+        const tonAmount = toNano((stakeAmount).toString()) + getMintFee(stakeNotificationAmount, null, null, true)
         const result = await financial.sendTonToFinancial(anyone.getSender(), tonAmount)
 
-        expect(result.transactions.length).toBe(4)
+        expect(result.transactions.length).toBe(5)
+
+        const stakeBody = beginCell()
+            .storeUint(FinancialOpcodes.mint, 32)
+            .endCell()
+
+        expect(result.transactions.length).toBe(5)
 
         expect(result.transactions).toHaveTransaction({
             from: anyone.address,
             to: financial.address,
             value: tonAmount,
+            body: stakeBody,
             success: true
         })
 
         const stakeJettonAmount = Number((initialFinancialData.jettonTotalSupply * stakeAmount / initialFinancialData.tonTotalSupply).toFixed(9))
-        console.log(toNano(stakeJettonAmount.toString()))
+
         const mintBody = beginCell()
-            .storeUint(0x178d4519, 32)
+            .storeUint(JettonWalletOpCodes.internalTransfer, 32)
             .storeUint(0, 64)
             .storeCoins(toNano(stakeJettonAmount.toString()))
             .storeAddress(financial.address)
             .storeAddress(anyone.address)
-            .storeCoins(100)
-            .storeInt(0n, 1)
+            .storeCoins(stakeNotificationAmount)
+            .storeMaybeRef(null)
             .endCell()
 
         expect(result.transactions).toHaveTransaction({
             from: financial.address,
             to: anyoneJettonWalletAddress,
             body: mintBody,
+            success: true
+        })
+
+        const transferNotificationBody = beginCell()
+            .storeUint(JettonWalletOpCodes.transferNotification ,32)
+            .storeUint(0,64)
+            .storeCoins(toNano(stakeJettonAmount.toFixed(9)))
+            .storeAddress(financial.address)
+            .storeMaybeRef(null)
+            .endCell()
+
+        expect(result.transactions).toHaveTransaction({
+            from: anyoneJettonWalletAddress,
+            to: anyone.address,
+            body: transferNotificationBody,
+            value: stakeNotificationAmount,
+            success: true
+        })
+
+        expect(result.transactions).toHaveTransaction({
+            from: anyoneJettonWalletAddress,
+            to: anyone.address,
+            body: beginCell()
+                .storeUint(JettonWalletOpCodes.excesses, 32)
+                .storeUint(0, 64)
+                .endCell(),
             success: true
         })
 
@@ -188,6 +314,241 @@ describe('Financial', () => {
         await financial.sendTonToFinancial(anyone.getSender(), tonAmount)
         const jettonWalletData2 = await anyoneJettonWallet.getWalletData()
         expect(jettonWalletData2.balance).toBe(jettonWalletData1.balance + stakeJettonAmount)
+
+        const stakeTx = findTransactionRequired(result.transactions, {
+            from: anyone.address,
+            to: financial.address,
+            value: tonAmount,
+            success: true,
+            body: stakeBody,
+            exitCode: FinancialErrors.noErrors
+        });
+
+        printTxGasStats("Stake", stakeTx)
+    })
+
+    it('[stake] should throw error when sender is not in workchain', async () => {
+        const anyone = await blockchain.treasury('anyone', {workchain: -1})
+
+        const initialFinancialData = await financial.getFinancialData()
+        expect(initialFinancialData.tonTotalSupply).toBe(1)
+        expect(initialFinancialData.jettonTotalSupply).toBe(1)
+        expect(initialFinancialData.commissionTotalSupply).toBe(0)
+
+        const tonAmount = toNano(100)
+        const forwardAmount = 10
+        const forwardPayload = beginCell()
+            .storeUint(2, 32)
+            .storeUint(0, 64)
+            .storeRef(
+                beginCell()
+                    .storeUint(2, 32)
+                    .storeUint(0, 64)
+                    .storeUint(0, 64)
+                    .storeUint(0, 64)
+                    .endCell()
+            )
+            .endCell()
+
+        const result = await financial.sendStake(anyone.getSender(), tonAmount, {
+            forwardAmount,
+            forwardPayload
+        })
+
+        expect(result.transactions.length).toBe(3)
+
+        expect(result.transactions).toHaveTransaction({
+            from: anyone.address,
+            to: financial.address,
+            value: tonAmount,
+            success: false,
+            exitCode: FinancialErrors.notWorkchain
+        })
+
+        expect(result.transactions).toHaveTransaction({
+            from: financial.address,
+            to: anyone.address,
+            value: (x) => {
+                return x! <= tonAmount
+            },
+            success: true
+        })
+
+        const financialData = await financial.getFinancialData()
+        expect(financialData.tonTotalSupply).toBe(initialFinancialData.tonTotalSupply)
+        expect(financialData.jettonTotalSupply).toBe(initialFinancialData.jettonTotalSupply)
+        expect(financialData.commissionTotalSupply).toBe(initialFinancialData.commissionTotalSupply)
+    })
+
+    it('[stake] should throw error when sender sent not enough ton', async () => {
+        const anyone = await blockchain.treasury('anyone')
+        const tonAmount = toNano('0.01')
+
+        const initialFinancialData = await financial.getFinancialData()
+        expect(initialFinancialData.tonTotalSupply).toBe(1)
+        expect(initialFinancialData.jettonTotalSupply).toBe(1)
+        expect(initialFinancialData.commissionTotalSupply).toBe(0)
+
+        const forwardAmount = 10
+        const forwardPayload = beginCell()
+            .storeUint(2, 32)
+            .storeUint(0, 64)
+            .storeRef(
+                beginCell()
+                    .storeUint(2, 32)
+                    .storeUint(0, 64)
+                    .storeUint(0, 64)
+                    .storeUint(0, 64)
+                    .endCell()
+            )
+            .endCell()
+
+        const result = await financial.sendStake(anyone.getSender(), tonAmount, {
+            forwardAmount,
+            forwardPayload
+        })
+
+        expect(result.transactions.length).toBe(3)
+
+        expect(result.transactions).toHaveTransaction({
+            from: anyone.address,
+            to: financial.address,
+            value: tonAmount,
+            success: false,
+            exitCode: FinancialErrors.insufficientMsgValue
+        })
+
+        expect(result.transactions).toHaveTransaction({
+            from: financial.address,
+            to: anyone.address,
+            value: (x) => {
+                return x! <= tonAmount
+            },
+            success: true
+        })
+
+        const financialData = await financial.getFinancialData()
+        expect(financialData.tonTotalSupply).toBe(initialFinancialData.tonTotalSupply)
+        expect(financialData.jettonTotalSupply).toBe(initialFinancialData.jettonTotalSupply)
+        expect(financialData.commissionTotalSupply).toBe(initialFinancialData.commissionTotalSupply)
+    })
+
+    it('[stake] should mint jettons to anyone, pools increase and send msg to sender from jetton wallet', async () => {
+        const anyone = await blockchain.treasury('anyone')
+
+        const reward = 1000
+        await financial.sendTonWithReward(anyone.getSender(), toNano(1000), {reward})
+
+        const anyoneJettonWalletAddress = await financial.getWalletAddress(anyone.address.toString())
+
+        const initialFinancialData = await financial.getFinancialData()
+        const commission = reward * initialFinancialData.commissionFactor / 1000
+        expect(initialFinancialData.tonTotalSupply).toBe(1 + reward - commission)
+        expect(initialFinancialData.jettonTotalSupply).toBe(1)
+        expect(initialFinancialData.commissionTotalSupply).toBe(commission)
+        const stakeAmount = 10000
+
+        const forwardAmount = toNano('10')
+        const forwardPayload = beginCell()
+            .storeUint(2, 32)
+            .storeUint(0, 64)
+            .storeRef(
+                beginCell()
+                    .storeUint(2, 32)
+                    .storeUint(0, 64)
+                    .storeUint(0, 64)
+                    .storeUint(0, 64)
+                    .endCell()
+            )
+            .endCell()
+        const tonAmount = toNano((stakeAmount).toString()) + getMintFee(forwardAmount, forwardPayload, null, true)
+
+        const result = await financial.sendStake(anyone.getSender(), tonAmount, {
+            forwardAmount: Number(fromNano(forwardAmount)),
+            forwardPayload
+        })
+
+        const stakeBody = beginCell()
+            .storeUint(FinancialOpcodes.stake, 32)
+            .storeUint(0, 64)
+            .storeCoins(forwardAmount)
+            .storeMaybeRef(forwardPayload)
+            .endCell()
+
+        expect(result.transactions.length).toBe(5)
+
+        expect(result.transactions).toHaveTransaction({
+            from: anyone.address,
+            to: financial.address,
+            value: tonAmount,
+            body: stakeBody,
+            success: true
+        })
+
+        const stakeJettonAmount = Number((initialFinancialData.jettonTotalSupply * stakeAmount / initialFinancialData.tonTotalSupply).toFixed(9))
+
+        const mintBody = beginCell()
+            .storeUint(JettonWalletOpCodes.internalTransfer, 32)
+            .storeUint(0, 64)
+            .storeCoins(toNano(stakeJettonAmount.toString()))
+            .storeAddress(financial.address)
+            .storeAddress(anyone.address)
+            .storeCoins(forwardAmount)
+            .storeMaybeRef(forwardPayload)
+            .endCell()
+
+        expect(result.transactions).toHaveTransaction({
+            from: financial.address,
+            to: anyoneJettonWalletAddress,
+            body: mintBody,
+            success: true
+        })
+
+        const transferNotificationBody = beginCell()
+            .storeUint(JettonWalletOpCodes.transferNotification ,32)
+            .storeUint(0,64)
+            .storeCoins(toNano(stakeJettonAmount.toFixed(9)))
+            .storeAddress(financial.address)
+            .storeMaybeRef(forwardPayload)
+            .endCell()
+
+        expect(result.transactions).toHaveTransaction({
+            from: anyoneJettonWalletAddress,
+            to: anyone.address,
+            body: transferNotificationBody,
+            value: forwardAmount,
+            success: true
+        })
+
+        expect(result.transactions).toHaveTransaction({
+            from: anyoneJettonWalletAddress,
+            to: anyone.address,
+            body: beginCell()
+                .storeUint(JettonWalletOpCodes.excesses, 32)
+                .storeUint(0, 64)
+                .endCell(),
+            success: true
+        })
+
+        const financialData = await financial.getFinancialData()
+        expect(financialData.tonTotalSupply).toBe(initialFinancialData.tonTotalSupply + stakeAmount)
+        expect(financialData.jettonTotalSupply).toBe(initialFinancialData.jettonTotalSupply + stakeJettonAmount)
+        expect(financialData.commissionTotalSupply).toBe(initialFinancialData.commissionTotalSupply)
+
+        const anyoneJettonWallet = blockchain.openContract(await JettonWallet.createFromAddress(anyoneJettonWalletAddress))
+        const jettonWalletData1 = await anyoneJettonWallet.getWalletData()
+        expect(jettonWalletData1.balance).toBe(stakeJettonAmount)
+
+        const stakeTx = findTransactionRequired(result.transactions, {
+            from: anyone.address,
+            to: financial.address,
+            value: tonAmount,
+            success: true,
+            body: stakeBody,
+            exitCode: FinancialErrors.noErrors
+        });
+
+        printTxGasStats("Stake", stakeTx)
     })
 
     it('[receive ton with reward] should throw error when msg value less than reward', async () => {
@@ -322,7 +683,10 @@ describe('Financial', () => {
         const queryId = 1111
         let customPayload = beginCell().storeUint(456, 14).endCell()
 
-        const result = await financial.sendGetQuote(anyone.getSender(), tonAmount, {queryId: queryId, customPayload: customPayload})
+        const result = await financial.sendGetQuote(anyone.getSender(), tonAmount, {
+            queryId: queryId,
+            customPayload: customPayload
+        })
 
         expect(result.transactions.length).toBe(3)
         expect(result.transactions).toHaveTransaction({
@@ -336,7 +700,10 @@ describe('Financial', () => {
 
         const smallTonAmount = toNano('0.01')
 
-        const result2 = await financial.sendGetQuote(anyone.getSender(), smallTonAmount, {queryId: queryId, customPayload: customPayload})
+        const result2 = await financial.sendGetQuote(anyone.getSender(), smallTonAmount, {
+            queryId: queryId,
+            customPayload: customPayload
+        })
 
         expect(result2.transactions.length).toBe(3)
         expect(result2.transactions).toHaveTransaction({
@@ -1060,12 +1427,12 @@ describe('Financial', () => {
         const jettonWallet = blockchain.openContract(await JettonWallet.createFromConfig({
             balance: 0,
             jettonMasterAddress: financial.address.toString(),
-            jettonWalletCode: jettonWalletCode,
             ownerAddress: financial.address.toString()
         }, jettonWalletCode))
 
         const jettonAmount = 100
-        await financial.sendTonToFinancial(blockchain.sender(financial.address), toNano((jettonAmount + 0.05).toString()))
+        const stakeAmount = toNano((jettonAmount).toString()) + getMintFee(stakeNotificationAmount, null, null, false)
+        await financial.sendTonToFinancial(blockchain.sender(financial.address), stakeAmount)
 
         let jettonWalletData = await jettonWallet.getWalletData()
         expect(jettonWalletData.balance).toBe(jettonAmount)
@@ -1166,10 +1533,10 @@ describe('Financial', () => {
         expect(financialData.commissionTotalSupply).toBe(initialFinancialData.commissionTotalSupply)
     })
 
-    it('[op burn_notification] should deploy unstake request, change supplies, refresh lockup config', async () => {
+    it('[op burn_notification] should deploy unstake request, change supplies, refresh lockup config (null forwardPayload)', async () => {
         const anyone = await blockchain.treasury('anyone')
         const lockupPeriod = await financial.getLockupPeriod()
-        const depositFee = 0.05;
+        const depositFee = Number(fromNano(getMintFee(stakeNotificationAmount, null, null, true)));
         const initialFinancialData1 = await financial.getFinancialData()
         expect(initialFinancialData1.tonTotalSupply).toBe(1)
         expect(initialFinancialData1.jettonTotalSupply).toBe(1)
@@ -1205,7 +1572,7 @@ describe('Financial', () => {
 
         const burnJettonAmount = 100
         const burnTonAmount = toNano(1)
-        const epoch = Math.trunc(Math.floor(now() / 1000) / lockupPeriod)
+        const epoch = Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod)
         const result = await anyoneJettonWallet.sendBurn(anyone.getSender(), burnTonAmount, {
             jettonAmount: burnJettonAmount
         })
@@ -1219,11 +1586,13 @@ describe('Financial', () => {
             success: true
         })
 
-        const burnBody = beginCell()
-            .storeUint(0x7bdd97de, 32)
+        const burnNotificationBody = beginCell()
+            .storeUint(JettonWalletOpCodes.burnNotification, 32)
             .storeUint(0, 64)
             .storeCoins(toNano(burnJettonAmount))
             .storeAddress(anyone.address)
+            .storeAddress(anyone.address)
+            .storeMaybeRef(null)
             .endCell()
 
         expect(result.transactions).toHaveTransaction({
@@ -1233,11 +1602,20 @@ describe('Financial', () => {
                 return x! <= burnTonAmount
             },
             success: true,
-            body: burnBody
+            body: burnNotificationBody
         })
         const withdrawTonNanoAmount = toNano(initialFinancialData2.tonTotalSupply.toString()) * toNano(burnJettonAmount.toString()) / toNano(initialFinancialData2.jettonTotalSupply.toString())
 
         const unstakeRequestAddress = await financial.getUnstakeRequestAddress(initialFinancialData2.nextUnstakeRequestIndex!)
+
+        const deployUnstakeRequestBody = beginCell()
+            .storeUint(FinancialOpcodes.deployUnstakeRequest, 32)
+            .storeAddress(anyone.address)
+            .storeCoins(withdrawTonNanoAmount)
+            .storeCoins(toNano(burnJettonAmount.toString()))
+            .storeMaybeRef(null)
+            .storeUint((epoch + 2) * lockupPeriod, 32)
+            .endCell()
 
         expect(result.transactions).toHaveTransaction({
             from: financial.address,
@@ -1246,13 +1624,7 @@ describe('Financial', () => {
                 return x! <= burnTonAmount
             },
             success: true,
-            body: beginCell()
-                .storeUint(FinancialOpcodes.deployUnstakeRequest, 32)
-                .storeAddress(anyone.address)
-                .storeCoins(withdrawTonNanoAmount)
-                .storeCoins(toNano(burnJettonAmount.toString()))
-                .storeInt((epoch + 2) * lockupPeriod, 32)
-                .endCell()
+            body: deployUnstakeRequestBody
         })
 
         const unstakeRequest = blockchain.openContract(await UnstakeRequest.createFromAddress(unstakeRequestAddress))
@@ -1264,6 +1636,7 @@ describe('Financial', () => {
         expect(unstakeRequestData.withdrawTonAmount).toBe(Number(fromNano(withdrawTonNanoAmount)))
         expect(unstakeRequestData.withdrawJettonAmount).toBe(burnJettonAmount)
         expect(unstakeRequestData.unlockTimestamp).toBe((epoch + 2) * lockupPeriod)
+        expect(unstakeRequestData.forwardPayload).toBe(null)
 
         const financialData = await financial.getFinancialData()
         expect(financialData.tonTotalSupply).toBe(Number(fromNano(toNano(initialFinancialData2.tonTotalSupply.toString()) - withdrawTonNanoAmount)))
@@ -1278,11 +1651,188 @@ describe('Financial', () => {
         const jettonWalletData = await anyoneJettonWallet.getWalletData()
 
         expect(jettonWalletData.balance).toBe(Number((initialJettonWalletData.balance - burnJettonAmount).toFixed(10)))
+
+        const burnNotificationTx = findTransactionRequired(result.transactions, {
+            from: anyoneJettonWallet.address,
+            to: financial.address,
+            success: true,
+            body: burnNotificationBody,
+            exitCode: FinancialErrors.noErrors
+        });
+        const deployUnstakeRequestTx = findTransactionRequired(result.transactions, {
+            from: financial.address,
+            to: unstakeRequestAddress,
+            value: (x) => {
+                return x! <= burnTonAmount
+            },
+            success: true,
+            body: deployUnstakeRequestBody
+        });
+
+        printTxGasStats("Burn Notification without forward payload", burnNotificationTx)
+        printTxGasStats("Deploy UnstakeRequest without forward payload", deployUnstakeRequestTx)
+    })
+
+    it('[op burn_notification] should deploy unstake request, change supplies, refresh lockup config (with forwardPayload)', async () => {
+        const anyone = await blockchain.treasury('anyone')
+        const lockupPeriod = await financial.getLockupPeriod()
+        const depositFee = Number(fromNano(getMintFee(stakeNotificationAmount, null, null, true)));
+        const initialFinancialData1 = await financial.getFinancialData()
+        expect(initialFinancialData1.tonTotalSupply).toBe(1)
+        expect(initialFinancialData1.jettonTotalSupply).toBe(1)
+        expect(initialFinancialData1.commissionTotalSupply).toBe(0)
+        expect(initialFinancialData1.lastLockupEpoch).toBe(0)
+        expect(initialFinancialData1.lockupSupply).toBe(0)
+        expect(initialFinancialData1.nextLockupSupply).toBe(0)
+        expect(initialFinancialData1.laterLockupSupply).toBe(0)
+        expect(initialFinancialData1.nextUnstakeRequestIndex).toBe(0)
+
+        const tonAmount = toNano("101")
+        await financial.sendTonToFinancial(anyone.getSender(), tonAmount)
+
+        const reward = 1000
+        await financial.sendTonWithReward(anyone.getSender(), toNano(1000), {reward})
+
+        const initialFinancialData2 = await financial.getFinancialData()
+        const commission = reward * initialFinancialData2.commissionFactor / 1000
+        expect(initialFinancialData2.tonTotalSupply).toBe(initialFinancialData1.tonTotalSupply + Number(fromNano(tonAmount)) - depositFee + reward - commission)
+        expect(initialFinancialData2.jettonTotalSupply).toBe(initialFinancialData1.jettonTotalSupply + Number(fromNano(tonAmount)) - depositFee)
+        expect(initialFinancialData2.commissionTotalSupply).toBe(commission)
+        expect(initialFinancialData2.lastLockupEpoch).toBe(0)
+        expect(initialFinancialData2.lockupSupply).toBe(0)
+        expect(initialFinancialData2.nextLockupSupply).toBe(0)
+        expect(initialFinancialData2.laterLockupSupply).toBe(0)
+        expect(initialFinancialData2.nextUnstakeRequestIndex).toBe(0)
+
+        const anyoneJettonWalletAddress = await financial.getWalletAddress(anyone.address.toString())
+        const anyoneJettonWallet = blockchain.openContract(await JettonWallet.createFromAddress(anyoneJettonWalletAddress))
+        await anyoneJettonWallet.sendReceive(blockchain.sender(financial.address), toNano('0.05'), {jettonAmount: 100})
+        const initialJettonWalletData = await anyoneJettonWallet.getWalletData()
+        expect(initialJettonWalletData.balance).toBe(Number(fromNano(tonAmount)) - depositFee + 100)
+
+        const burnJettonAmount = 100
+        const burnTonAmount = toNano(1)
+        const epoch = Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod)
+
+        const anotherOne = await blockchain.treasury('anotherOne')
+        const forwardPayload = beginCell()
+            .storeUint(2, 32)
+            .storeUint(0, 64)
+            .storeRef(
+                beginCell()
+                    .storeUint(2, 32)
+                    .storeUint(0, 64)
+                    .storeUint(0, 64)
+                    .storeUint(0, 64)
+                    .endCell()
+            )
+            .endCell()
+
+        const result = await anyoneJettonWallet.sendBurn(anyone.getSender(), burnTonAmount, {
+            jettonAmount: burnJettonAmount,
+            receiverAddress: anotherOne.address.toString(),
+            forwardPayload
+        })
+
+        expect(result.transactions.length).toBe(4)
+
+        expect(result.transactions).toHaveTransaction({
+            from: anyone.address,
+            to: anyoneJettonWallet.address,
+            value: burnTonAmount,
+            success: true
+        })
+
+        const burnNotificationBody = beginCell()
+            .storeUint(JettonWalletOpCodes.burnNotification, 32)
+            .storeUint(0, 64)
+            .storeCoins(toNano(burnJettonAmount))
+            .storeAddress(anyone.address)
+            .storeAddress(anotherOne.address)
+            .storeMaybeRef(forwardPayload)
+            .endCell()
+
+        expect(result.transactions).toHaveTransaction({
+            from: anyoneJettonWallet.address,
+            to: financial.address,
+            value: (x) => {
+                return x! <= burnTonAmount
+            },
+            success: true,
+            body: burnNotificationBody
+        })
+        const withdrawTonNanoAmount = toNano(initialFinancialData2.tonTotalSupply.toString()) * toNano(burnJettonAmount.toString()) / toNano(initialFinancialData2.jettonTotalSupply.toString())
+
+        const unstakeRequestAddress = await financial.getUnstakeRequestAddress(initialFinancialData2.nextUnstakeRequestIndex!)
+
+        const deployUnstakeRequestBody = beginCell()
+            .storeUint(FinancialOpcodes.deployUnstakeRequest, 32)
+            .storeAddress(anotherOne.address)
+            .storeCoins(withdrawTonNanoAmount)
+            .storeCoins(toNano(burnJettonAmount.toString()))
+            .storeMaybeRef(forwardPayload)
+            .storeUint((epoch + 2) * lockupPeriod, 32)
+            .endCell()
+
+        expect(result.transactions).toHaveTransaction({
+            from: financial.address,
+            to: unstakeRequestAddress,
+            value: (x) => {
+                return x! <= burnTonAmount
+            },
+            success: true,
+            body: deployUnstakeRequestBody
+        })
+
+        const unstakeRequest = blockchain.openContract(await UnstakeRequest.createFromAddress(unstakeRequestAddress))
+        const unstakeRequestData = await unstakeRequest.getUnstakeData()
+
+        expect(unstakeRequestData.index).toBe(initialFinancialData2.nextUnstakeRequestIndex)
+        expect(unstakeRequestData.financialAddress).toBe(financial.address.toString())
+        expect(unstakeRequestData.ownerAddress).toBe(anotherOne.address.toString())
+        expect(unstakeRequestData.withdrawTonAmount).toBe(Number(fromNano(withdrawTonNanoAmount)))
+        expect(unstakeRequestData.withdrawJettonAmount).toBe(burnJettonAmount)
+        expect(unstakeRequestData.unlockTimestamp).toBe((epoch + 2) * lockupPeriod)
+        expect(unstakeRequestData.forwardPayload!.hash().toString()).toBe(forwardPayload.hash().toString())
+
+        const financialData = await financial.getFinancialData()
+        expect(financialData.tonTotalSupply).toBe(Number(fromNano(toNano(initialFinancialData2.tonTotalSupply.toString()) - withdrawTonNanoAmount)))
+        expect(financialData.jettonTotalSupply).toBe(Number(fromNano(toNano(initialFinancialData2.jettonTotalSupply.toString()) - toNano(burnJettonAmount.toString()))))
+        expect(financialData.commissionTotalSupply).toBe(initialFinancialData2.commissionTotalSupply)
+        expect(financialData.lastLockupEpoch).toBe(epoch)
+        expect(financialData.lockupSupply).toBe(initialFinancialData2.lockupSupply)
+        expect(financialData.nextLockupSupply).toBe(initialFinancialData2.nextLockupSupply)
+        expect(financialData.laterLockupSupply).toBe(Number(fromNano(withdrawTonNanoAmount)))
+        expect(financialData.nextUnstakeRequestIndex).toBe(initialFinancialData2.nextUnstakeRequestIndex! + 1)
+
+        const jettonWalletData = await anyoneJettonWallet.getWalletData()
+
+        expect(jettonWalletData.balance).toBe(Number((initialJettonWalletData.balance - burnJettonAmount).toFixed(10)))
+
+        const burnNotificationTx = findTransactionRequired(result.transactions, {
+            from: anyoneJettonWallet.address,
+            to: financial.address,
+            success: true,
+            body: burnNotificationBody,
+            exitCode: FinancialErrors.noErrors
+        });
+        const deployUnstakeRequestTx = findTransactionRequired(result.transactions, {
+            from: financial.address,
+            to: unstakeRequestAddress,
+            value: (x) => {
+                return x! <= burnTonAmount
+            },
+            success: true,
+            body: deployUnstakeRequestBody
+        });
+
+        printTxGasStats("Burn Notification with forward payload", burnNotificationTx)
+        printTxGasStats("Deploy UnstakeRequest with forward payload", deployUnstakeRequestTx)
     })
 
     it('[op unstake] should throw error if sender is not a unstake request', async () => {
         const lockupPeriod = await financial.getLockupPeriod()
-        const epoch = Math.trunc(Math.floor(now() / 1000) / lockupPeriod)
+        const epoch = Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod)
         const withdrawTonAmount = 100;
         const withdrawJettonAmount = 100;
         const newFinancial = blockchain.openContract(await Financial.createFromConfig({
@@ -1338,10 +1888,11 @@ describe('Financial', () => {
             to: newFinancial.address,
             body: beginCell()
                 .storeUint(FinancialOpcodes.unstake, 32)
-                .storeInt(0, 64)
+                .storeUint(0, 64)
                 .storeAddress(anyone.address)
                 .storeCoins(toNano(withdrawTonAmount.toString()))
                 .storeCoins(toNano(withdrawJettonAmount.toString()))
+                .storeMaybeRef(null)
                 .endCell(),
             success: false,
             exitCode: FinancialErrors.notFromUnstakeRequest
@@ -1360,7 +1911,7 @@ describe('Financial', () => {
 
     it('[op unstake] should return unstake request if not enough balance', async () => {
         const lockupPeriod = await financial.getLockupPeriod()
-        const epoch = Math.trunc(Math.floor(now() / 1000) / lockupPeriod)
+        const epoch = Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod)
         const withdrawTonAmount = 100;
         const withdrawJettonAmount = 100;
         const unstakeRequestIndex = 0;
@@ -1420,7 +1971,7 @@ describe('Financial', () => {
             unlockTimestamp: 100
         })
 
-        const currentTimestamp = Math.trunc(Math.floor(now() / 1000))
+        const currentTimestamp = Math.trunc(Math.floor(Date.now() / 1000))
 
         const result = await newFinancial.sendUnstake(blockchain.sender(unstakeRequestAddress), toNano('0.5'), {
             index: unstakeRequestIndex,
@@ -1436,10 +1987,11 @@ describe('Financial', () => {
             to: newFinancial.address,
             body: beginCell()
                 .storeUint(FinancialOpcodes.unstake, 32)
-                .storeInt(unstakeRequestIndex, 64)
+                .storeUint(unstakeRequestIndex, 64)
                 .storeAddress(anyone.address)
                 .storeCoins(toNano(withdrawTonAmount.toString()))
                 .storeCoins(toNano(withdrawJettonAmount.toString()))
+                .storeMaybeRef(null)
                 .endCell(),
             success: true
         })
@@ -1448,7 +2000,7 @@ describe('Financial', () => {
             from: newFinancial.address,
             to: unstakeRequestAddress,
             body: beginCell()
-                .storeUint(FinancialOpcodes.returnUnstakeRequest,32)
+                .storeUint(FinancialOpcodes.returnUnstakeRequest, 32)
                 .storeUint(currentTimestamp + lockupPeriod / 2, 32)
                 .endCell(),
             success: true
@@ -1473,9 +2025,9 @@ describe('Financial', () => {
         expect(unstakeRequestData.unlockTimestamp).toBe(currentTimestamp + lockupPeriod / 2)
     });
 
-    it('[op unstake] should send ton to user', async () => {
+    it('[op unstake] should send ton to user (null forward payload)', async () => {
         const lockupPeriod = await financial.getLockupPeriod()
-        const epoch = Math.trunc(Math.floor(now() / 1000) / lockupPeriod)
+        const epoch = Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod)
         const withdrawTonAmount = 100;
         const withdrawJettonAmount = 100;
         const unstakeRequestIndex = 0;
@@ -1533,18 +2085,27 @@ describe('Financial', () => {
 
         expect(result.transactions.length).toBe(2)
 
+        const unstakeBody = beginCell()
+            .storeUint(FinancialOpcodes.unstake, 32)
+            .storeUint(unstakeRequestIndex, 64)
+            .storeAddress(anyone.address)
+            .storeCoins(toNano(withdrawTonAmount.toString()))
+            .storeCoins(toNano(withdrawJettonAmount.toString()))
+            .storeMaybeRef(null)
+            .endCell()
+
         expect(result.transactions).toHaveTransaction({
             from: unstakeRequestAddress,
             to: newFinancial.address,
-            body: beginCell()
-                .storeUint(FinancialOpcodes.unstake, 32)
-                .storeInt(unstakeRequestIndex, 64)
-                .storeAddress(anyone.address)
-                .storeCoins(toNano(withdrawTonAmount.toString()))
-                .storeCoins(toNano(withdrawJettonAmount.toString()))
-                .endCell(),
+            body: unstakeBody,
             success: true
         })
+
+        const unstakeNotificationBody = beginCell()
+            .storeUint(FinancialOpcodes.unstakeNotification, 32)
+            .storeUint(0, 64)
+            .storeMaybeRef(null)
+            .endCell()
 
         expect(result.transactions).toHaveTransaction({
             from: newFinancial.address,
@@ -1552,23 +2113,160 @@ describe('Financial', () => {
             success: true,
             value: (x) => {
                 return x! <= toNano(withdrawTonAmount.toString()) + toNano(msgValue.toString())
-            }
+            },
+            body: unstakeNotificationBody
         })
 
         financialData = await newFinancial.getFinancialData()
         expect(financialData.tonTotalSupply).toBe(1)
         expect(financialData.jettonTotalSupply).toBe(1)
         expect(financialData.commissionTotalSupply).toBe(0)
-        expect(financialData.lastLockupEpoch).toBe(Math.trunc(Math.floor(now() / 1000) / lockupPeriod))
+        expect(financialData.lastLockupEpoch).toBe(Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod))
         expect(financialData.lockupSupply).toBe(laterLockupSupply - withdrawTonAmount)
         expect(financialData.nextLockupSupply).toBe(0)
         expect(financialData.laterLockupSupply).toBe(0)
         expect(financialData.nextUnstakeRequestIndex).toBe(unstakeRequestIndex + 1)
+
+        const unstakeTx = findTransactionRequired(result.transactions, {
+            from: unstakeRequestAddress,
+            to: newFinancial.address,
+            success: true,
+            body: unstakeBody,
+            exitCode: FinancialErrors.noErrors
+        });
+
+        printTxGasStats("Unstake without forward payload", unstakeTx)
+    });
+
+    it('[op unstake] should send ton to user (with forward payload)', async () => {
+        const lockupPeriod = await financial.getLockupPeriod()
+        const epoch = Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod)
+        const withdrawTonAmount = 100;
+        const withdrawJettonAmount = 100;
+        const unstakeRequestIndex = 0;
+        const laterLockupSupply = 1000;
+        const newFinancial = blockchain.openContract(await Financial.createFromConfig({
+            commissionAddress: commissionWallet.address.toString(),
+            adminAddress: admin.address.toString(),
+            transactionAdminAddress: transactionAdmin.address.toString(),
+            commissionFactor: 50,
+            commissionTotalSupply: 0,
+            content: {
+                name: "test",
+                description: "test ton staking jetton",
+                symbol: "TEST"
+            },
+            jettonTotalSupply: 1,
+            tonTotalSupply: 1,
+            jettonWalletCode: jettonWalletCode,
+            unstakeRequestCode: unstakeRequestCode,
+            lastLockupEpoch: epoch - 2,
+            laterLockupSupply: laterLockupSupply,
+            nextUnstakeRequestIndex: unstakeRequestIndex + 1
+        }, code))
+
+        const deployer = await blockchain.treasury('deployer1')
+        const finDeployResult = await newFinancial.sendDeploy(deployer.getSender(), toNano('1000'))
+
+        expect(finDeployResult.transactions).toHaveTransaction({
+            from: deployer.address,
+            to: newFinancial.address,
+            deploy: true,
+        })
+
+        let financialData = await newFinancial.getFinancialData()
+        expect(financialData.tonTotalSupply).toBe(1)
+        expect(financialData.jettonTotalSupply).toBe(1)
+        expect(financialData.commissionTotalSupply).toBe(0)
+        expect(financialData.lastLockupEpoch).toBe(epoch - 2)
+        expect(financialData.lockupSupply).toBe(0)
+        expect(financialData.nextLockupSupply).toBe(0)
+        expect(financialData.laterLockupSupply).toBe(laterLockupSupply)
+        expect(financialData.nextUnstakeRequestIndex).toBe(unstakeRequestIndex + 1)
+
+        const unstakeRequestAddress = await newFinancial.getUnstakeRequestAddress(unstakeRequestIndex)
+
+        const anyone = await blockchain.treasury('anyone')
+        const msgValue = 0.5
+
+        const forwardPayload = beginCell()
+            .storeUint(2, 32)
+            .storeUint(0, 64)
+            .storeRef(
+                beginCell()
+                    .storeUint(2, 32)
+                    .storeUint(0, 64)
+                    .storeUint(0, 64)
+                    .storeUint(0, 64)
+                    .endCell()
+            )
+            .endCell()
+        const result = await newFinancial.sendUnstake(blockchain.sender(unstakeRequestAddress), toNano(msgValue.toString()), {
+            index: unstakeRequestIndex,
+            ownerAddress: anyone.address.toString(),
+            withdrawTonAmount,
+            withdrawJettonAmount,
+            forwardPayload
+        })
+
+        expect(result.transactions.length).toBe(2)
+
+        const unstakeBody = beginCell()
+            .storeUint(FinancialOpcodes.unstake, 32)
+            .storeUint(unstakeRequestIndex, 64)
+            .storeAddress(anyone.address)
+            .storeCoins(toNano(withdrawTonAmount.toString()))
+            .storeCoins(toNano(withdrawJettonAmount.toString()))
+            .storeMaybeRef(forwardPayload)
+            .endCell()
+
+        expect(result.transactions).toHaveTransaction({
+            from: unstakeRequestAddress,
+            to: newFinancial.address,
+            body: unstakeBody,
+            success: true
+        })
+
+        const unstakeNotificationBody = beginCell()
+            .storeUint(FinancialOpcodes.unstakeNotification, 32)
+            .storeUint(0, 64)
+            .storeMaybeRef(forwardPayload)
+            .endCell()
+
+        expect(result.transactions).toHaveTransaction({
+            from: newFinancial.address,
+            to: anyone.address,
+            success: true,
+            value: (x) => {
+                return x! <= toNano(withdrawTonAmount.toString()) + toNano(msgValue.toString())
+            },
+            body: unstakeNotificationBody
+        })
+
+        financialData = await newFinancial.getFinancialData()
+        expect(financialData.tonTotalSupply).toBe(1)
+        expect(financialData.jettonTotalSupply).toBe(1)
+        expect(financialData.commissionTotalSupply).toBe(0)
+        expect(financialData.lastLockupEpoch).toBe(Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod))
+        expect(financialData.lockupSupply).toBe(laterLockupSupply - withdrawTonAmount)
+        expect(financialData.nextLockupSupply).toBe(0)
+        expect(financialData.laterLockupSupply).toBe(0)
+        expect(financialData.nextUnstakeRequestIndex).toBe(unstakeRequestIndex + 1)
+
+        const unstakeTx = findTransactionRequired(result.transactions, {
+            from: unstakeRequestAddress,
+            to: newFinancial.address,
+            success: true,
+            body: unstakeBody,
+            exitCode: FinancialErrors.noErrors
+        });
+
+        printTxGasStats("Unstake with forward payload", unstakeTx)
     });
 
     it('[refresh lockup config] should throw error when sender sent not enough ton', async () => {
         const lockupPeriod = await financial.getLockupPeriod()
-        const lastLockupEpoch = Math.trunc(Math.floor(now() / 1000) / lockupPeriod) - 2
+        const lastLockupEpoch = Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod) - 2
 
         const lockupSupply = 1000;
         const nextLockupSupply = 100;
@@ -1625,7 +2323,7 @@ describe('Financial', () => {
 
     it('[refresh lockup config] should refresh lockup token v1', async () => {
         const lockupPeriod = await financial.getLockupPeriod()
-        const lastLockupEpoch = Math.trunc(Math.floor(now() / 1000) / lockupPeriod) - 2
+        const lastLockupEpoch = Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod) - 2
 
         const lockupSupply = 1000;
         const nextLockupSupply = 1000;
@@ -1673,7 +2371,7 @@ describe('Financial', () => {
         })
 
         financialData = await newFinancial.getFinancialData()
-        expect(financialData.lastLockupEpoch).toBe(Math.trunc(Math.floor(now() / 1000) / lockupPeriod))
+        expect(financialData.lastLockupEpoch).toBe(Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod))
         expect(financialData.lockupSupply).toBe(lockupSupply + nextLockupSupply + laterLockupSupply)
         expect(financialData.nextLockupSupply).toBe(0)
         expect(financialData.laterLockupSupply).toBe(0)
@@ -1681,7 +2379,7 @@ describe('Financial', () => {
 
     it('[refresh lockup config] should refresh lockup token v2', async () => {
         const lockupPeriod = await financial.getLockupPeriod()
-        const lastLockupEpoch = Math.trunc(Math.floor(now() / 1000) / lockupPeriod) - 1
+        const lastLockupEpoch = Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod) - 1
 
         const lockupSupply = 1000;
         const nextLockupSupply = 100;
@@ -1729,7 +2427,7 @@ describe('Financial', () => {
         })
 
         financialData = await newFinancial.getFinancialData()
-        expect(financialData.lastLockupEpoch).toBe(Math.trunc(Math.floor(now() / 1000) / lockupPeriod))
+        expect(financialData.lastLockupEpoch).toBe(Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod))
         expect(financialData.lockupSupply).toBe(lockupSupply + nextLockupSupply)
         expect(financialData.nextLockupSupply).toBe(laterLockupSupply)
         expect(financialData.laterLockupSupply).toBe(0)
@@ -1737,7 +2435,7 @@ describe('Financial', () => {
 
     it('[refresh lockup config] should refresh lockup token v3', async () => {
         const lockupPeriod = await financial.getLockupPeriod()
-        const lastLockupEpoch = Math.trunc(Math.floor(now() / 1000) / lockupPeriod)
+        const lastLockupEpoch = Math.trunc(Math.floor(Date.now() / 1000) / lockupPeriod)
 
         const lockupSupply = 1000;
         const nextLockupSupply = 100;

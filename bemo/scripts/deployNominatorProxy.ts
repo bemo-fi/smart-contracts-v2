@@ -1,26 +1,26 @@
-import {Address, toNano} from 'ton-core'
+import {Address, toNano} from '@ton/core'
 import {NominatorProxy} from '../wrappers/NominatorProxy'
-import {compile, NetworkProvider, sleep} from '@ton-community/blueprint'
+import {NetworkProvider} from '@ton/blueprint'
+import {TransactionMultisig} from "../wrappers/TransactionMultisig";
 
 export async function run(provider: NetworkProvider) {
 
+    const transactionMultisig = provider.open(TransactionMultisig.createFromAddress(Address.parse("EQC7vy1mW_wPJPbbEAfWcOd-DNV66YYJb8vYJPpoplZUmlTr")))
+
+    const proxyCode = await transactionMultisig.getProxyCode()
+
     const proxy = provider.open(NominatorProxy.createFromConfig({
-        depositAmount: 0,
-        depositTime: 0,
-        financialAddress: "EQAlo09uk_Q8eyfmejNobKNL-2nnQqkbFUrsDfrLXGoC71lA",
-        nominatorPoolAddress: "Ef9Q3y_JQr7uIoB6uKKFXhcpCwnIq4nUP-eDdVuQYdYsUERp"
-    }, await compile('NominatorProxy')));
+        financialAddress: "EQDNhy-nxYFgUqzfUzImBEP67JqsyMIcyk2S5_RwNNEYku0k",
+        nominatorPoolAddress: "Ef8nWRW8IV7riENJ2GzVoErKNNjWSPM1LaJkY8ya8EsoLuqI"
+    }, proxyCode));
+
+    console.log('---------------------------------');
+    console.log('NOMINATOR PROXY ADDRESS:', proxy.address.toString())
+    console.log('---------------------------------');
 
     await proxy.sendDeploy(provider.sender(), toNano('0.05'));
 
     await provider.waitForDeploy(proxy.address);
 
     console.log(await proxy.getProxyData())
-
-    // await proxy.sendTonToNominatorProxy(provider.sender(), toNano("1"))
-    //
-    // await sleep(3000)
-    //
-    // console.log(await proxy.getProxyData())
-    // run methods on `nominatorProxy`
 }

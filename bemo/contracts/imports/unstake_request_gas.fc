@@ -1,0 +1,12 @@
+#include "precompiled_gas_const.fc";
+
+() check_balance_is_enough_to_unstake(int balance, int fwd_fee) impure inline {
+    throw_unless(ERROR::NOT_ENOUGH_GAS,
+        balance >
+        ;; 2 messages: unstake_request->financial, financial->user
+        2 * fwd_fee +
+        get_compute_fee(BASECHAIN, UNSTAKE_REQUEST_GAS_CONSUMPTION) +
+        get_compute_fee(BASECHAIN, UNSTAKE_GAS_CONSUMPTION) +
+        calculate_financial_min_storage_fee()
+    );
+}

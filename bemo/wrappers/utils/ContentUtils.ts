@@ -1,4 +1,6 @@
-import {beginCell, Builder, Cell, Dictionary, Slice} from "ton-core"
+// noinspection TypeScriptValidateTypes
+
+import {beginCell, Builder, Cell, Dictionary, Slice} from "@ton/core"
 import {Sha256} from "@aws-crypto/sha256-js";
 import axios from "axios";
 import BN from "bn.js";

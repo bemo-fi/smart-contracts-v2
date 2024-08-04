@@ -1,0 +1,4 @@
+// Financial Contract
+stake#4253c4d5 query_id:uint64 forward_ton_amount:(VarUInteger 16) forward_payload:(Maybe ^Cell) = InternalMsgBody;
+
+unstake_notification#90c80a07 query_id:uint64 forward_payload:(Maybe ^Cell) = InternalMsgBody;

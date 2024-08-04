@@ -36,7 +36,6 @@ const OP::CANCEL_CHANGING_FINANCIAL_CODE = 601;
 const OP::SEND_COMMISSION_FROM_FINANCIAL = 7;
 const OP::TRANFER_JETTON_FROM_FINANCIAL = 8;
 const OP::RETURN_TON = 9;
-const OP::FORCE_QUEUE_CLEARING = 10;
 
 ;; financial ops
 const FIN_OP::CHANGE_ADMIN = 2;
@@ -95,15 +94,15 @@ global cell owners_addresses_info;
 
 () save_data() impure inline {
     set_data(begin_cell()
-    .store_uint(wallet_id, 32)
-    .store_uint(n, 8)
-    .store_uint(k, 8)
-    .store_dict(owner_infos)
-    .store_dict(pending_queries)
-    .store_slice(financial_address)
-    .store_ref(temp_upgrade)
-    .store_dict(owners_addresses_info)
-    .end_cell()
+            .store_uint(wallet_id, 32)
+            .store_uint(n, 8)
+            .store_uint(k, 8)
+            .store_dict(owner_infos)
+            .store_dict(pending_queries)
+            .store_slice(financial_address)
+            .store_ref(temp_upgrade)
+            .store_dict(owners_addresses_info)
+            .end_cell()
     );
 }
 
@@ -112,92 +111,92 @@ global cell owners_addresses_info;
 (slice, int, slice, int, int, int, slice, int, int, int, cell, cell) unpack_temp_upgrade(cell temp_upgrade) inline_ref {
     var cs = temp_upgrade.begin_parse();
     return (
-        cs~load_msg_addr(), ;; admin_address
-        cs~load_uint(32), ;; changing_admin_time
-        cs~load_msg_addr(), ;; transaction_address - multisig that will send money from the financial
-        cs~load_uint(32), ;; changing_transaction_address_time
-        cs~load_int(16), ;; commission_factor
-        cs~load_uint(32), ;; changing_commission_time
-        cs~load_msg_addr(), ;; commission_address
-        cs~load_uint(32), ;; changing_commission_address_time
-        cs~load_uint(32), ;; changing_content_time
-        cs~load_uint(32), ;; changing_financial_code_time
-        cs~load_ref(), ;; jetton_content
-        cs~load_ref() ;; financial_code
+            cs~load_msg_addr(), ;; admin_address
+            cs~load_uint(32), ;; changing_admin_time
+            cs~load_msg_addr(), ;; transaction_address - multisig that will send money from the financial
+            cs~load_uint(32), ;; changing_transaction_address_time
+            cs~load_int(16), ;; commission_factor
+            cs~load_uint(32), ;; changing_commission_time
+            cs~load_msg_addr(), ;; commission_address
+            cs~load_uint(32), ;; changing_commission_address_time
+            cs~load_uint(32), ;; changing_content_time
+            cs~load_uint(32), ;; changing_financial_code_time
+            cs~load_ref(), ;; jetton_content
+            cs~load_ref() ;; financial_code
     );
 }
 
 (cell) pack_temp_upgrade(slice admin_address, int changing_admin_time, slice transaction_address, int changing_transaction_address_time, commission_factor, changing_commission_time, slice commission_address, int changing_commission_address_time, int changing_content_time, int changing_financial_code_time, cell jetton_content, cell financial_code){
     return begin_cell()
-    .store_slice(admin_address)
-    .store_uint(changing_admin_time, 32)
-    .store_slice(transaction_address)
-    .store_uint(changing_transaction_address_time, 32)
-    .store_int(commission_factor, 16)
-    .store_uint(changing_commission_time, 32)
-    .store_slice(commission_address)
-    .store_uint(changing_commission_address_time, 32)
-    .store_uint(changing_content_time, 32)
-    .store_uint(changing_financial_code_time, 32)
-    .store_ref(jetton_content)
-    .store_ref(financial_code)
-    .end_cell();
+            .store_slice(admin_address)
+            .store_uint(changing_admin_time, 32)
+            .store_slice(transaction_address)
+            .store_uint(changing_transaction_address_time, 32)
+            .store_int(commission_factor, 16)
+            .store_uint(changing_commission_time, 32)
+            .store_slice(commission_address)
+            .store_uint(changing_commission_address_time, 32)
+            .store_uint(changing_content_time, 32)
+            .store_uint(changing_financial_code_time, 32)
+            .store_ref(jetton_content)
+            .store_ref(financial_code)
+            .end_cell();
 }
 
 (int, int) unpack_owner_address_info(slice owner_address_info) inline_ref {
     return (
-        owner_address_info~load_uint(8), ;; owner address index - i
-        owner_address_info~load_uint(8) ;; flood
+            owner_address_info~load_uint(8), ;; owner address index - i
+            owner_address_info~load_uint(8) ;; flood
     );
 }
 
 (builder) pack_owner_address_info(int index, int flood) inline_ref {
     return begin_cell()
-    .store_uint(index, 8)
-    .store_uint(flood, 8);
+            .store_uint(index, 8)
+            .store_uint(flood, 8);
 }
 
 (int, int, int, slice) unpack_query_data(slice in_msg, int n, slice query, var found?, int root_addr) impure inline_ref {
-    if (found?) {
-        throw_unless(ERROR::QUERY_NOT_ACTIVE, query~load_int(1));
-        (int creator_addr, int cnt, int cnt_bits, slice msg) = (query~load_uint(256), query~load_uint(8), query~load_uint(n), query);
-        throw_unless(ERROR::MSG_DOESNT_MATCH, slice_hash(msg) == slice_hash(in_msg));
-        return (creator_addr, cnt, cnt_bits, msg);
-    }
-    return (root_addr, 0, 0, in_msg);
+  if (found?) {
+    throw_unless(ERROR::QUERY_NOT_ACTIVE, query~load_int(1));
+    (int creator_addr, int cnt, int cnt_bits, slice msg) = (query~load_uint(256), query~load_uint(8), query~load_uint(n), query);
+    throw_unless(ERROR::MSG_DOESNT_MATCH, slice_hash(msg) == slice_hash(in_msg));
+    return (creator_addr, cnt, cnt_bits, msg);
+  }
+  return (root_addr, 0, 0, in_msg);
 }
 
 ;; =============== utils =============================
 
 (cell) execute_op_code(slice msg_body, slice financial_address, cell temp_upgrade) impure {
     var (admin_address, changing_admin_time, transaction_address, changing_transaction_address_time, commission_factor, changing_commission_time, commission_address, changing_commission_address_time, changing_content_time, changing_financial_code_time, jetton_content, financial_code) = unpack_temp_upgrade(temp_upgrade);
-    int op = msg_body~load_uint(32);
+    int op = msg_body~load_op();
 
     if (op == OP::CHANGE_ADMIN_MULTISIG) { ;; change admin multisig in financial
-        if (admin_address.preload_uint(2) != 0) {
+        if (~ is_address_none(admin_address)) {
             throw_unless(ERROR::UPDATE_DELAY_HAS_NOT_PASSED_YET, now() - changing_admin_time >= TIME::UPDATE_DELAY);
-            send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_uint(FIN_OP::CHANGE_ADMIN, 32).store_slice(admin_address).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
-            admin_address = begin_cell().store_uint(0, 2).end_cell().begin_parse();
+            send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_op(FIN_OP::CHANGE_ADMIN).store_slice(admin_address).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
+            admin_address = address_none();
         } else {
             admin_address = msg_body~load_msg_addr();
             changing_admin_time = now();
         }
     } elseif (op == OP::CANCEL_CHANGING_ADMIN_MULTISIG) { ;; cancel changing admin multisig
-        if (admin_address.preload_uint(2) != 0) {
-            admin_address = begin_cell().store_uint(0, 2).end_cell().begin_parse();
+        if (~ is_address_none(admin_address)) {
+            admin_address = address_none();
         }
     } elseif (op == OP::CHANGE_TRANSACTION_MULTISIG) { ;; change transaction multisig in financial
-        if (transaction_address.preload_uint(2) != 0) {
+        if (~ is_address_none(transaction_address)) {
             throw_unless(ERROR::UPDATE_DELAY_HAS_NOT_PASSED_YET, now() - changing_transaction_address_time >= TIME::UPDATE_DELAY);
-            send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_uint(FIN_OP::CHANGE_TRANSACTION_ADMIN, 32).store_slice(transaction_address).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
-            transaction_address = begin_cell().store_uint(0, 2).end_cell().begin_parse();
+            send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_op(FIN_OP::CHANGE_TRANSACTION_ADMIN).store_slice(transaction_address).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
+            transaction_address = address_none();
         } else {
             transaction_address = msg_body~load_msg_addr();
             changing_transaction_address_time = now();
         }
     } elseif (op == OP::CANCEL_CHANGING_TRANSACTION_MULTISIG) { ;; cancel changing transaction multisig
-        if (transaction_address.preload_uint(2) != 0) {
-            transaction_address = begin_cell().store_uint(0, 2).end_cell().begin_parse();
+        if (~ is_address_none(transaction_address)) {
+            transaction_address = address_none();
         }
     } elseif (op == OP::CHANGE_JETTON_CONTENT) { ;; change jetton content in financial
         slice jetton_content_slice = begin_parse(jetton_content);
@@ -206,7 +205,7 @@ global cell owners_addresses_info;
             changing_content_time = now();
         } else {
             throw_unless(ERROR::UPDATE_DELAY_HAS_NOT_PASSED_YET, now() - changing_content_time >= TIME::UPDATE_DELAY);
-            send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_uint(FIN_OP::CHANGE_CONTENT, 32).store_ref(jetton_content).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
+            send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_op(FIN_OP::CHANGE_CONTENT).store_ref(jetton_content).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
             jetton_content = begin_cell().end_cell();
         }
     } elseif (op == OP::CANCEL_CHANGING_JETTON_CONTENT) { ;; cancel jetton content
@@ -217,7 +216,7 @@ global cell owners_addresses_info;
     } elseif (op == OP::CHANGE_COMMISSION_FACTOR) { ;; change commission factor in financial
         if (commission_factor != -1) {
             throw_unless(ERROR::UPDATE_DELAY_HAS_NOT_PASSED_YET, now() - changing_commission_time >= TIME::UPDATE_DELAY);
-            send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_uint(FIN_OP::CHANGE_COMMISSION_FACTOR, 32).store_uint(commission_factor, 16).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
+            send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_op(FIN_OP::CHANGE_COMMISSION_FACTOR).store_uint(commission_factor, 16).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
             commission_factor = -1;
         } else {
             commission_factor = msg_body~load_uint(16);
@@ -229,17 +228,17 @@ global cell owners_addresses_info;
             commission_factor = -1;
         }
     } elseif (op == OP::CHANGE_COMMISSION_ADDRESS) { ;; change commission address in financial
-        if (commission_address.preload_uint(2) != 0) {
+        if (~ is_address_none(commission_address)) {
             throw_unless(ERROR::UPDATE_DELAY_HAS_NOT_PASSED_YET, now() - changing_commission_address_time >= TIME::UPDATE_DELAY);
-            send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_uint(FIN_OP::CHANGE_COMMISSION_ADDRESS, 32).store_slice(commission_address).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
-            commission_address = begin_cell().store_uint(0, 2).end_cell().begin_parse();
+            send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_op(FIN_OP::CHANGE_COMMISSION_ADDRESS).store_slice(commission_address).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
+            commission_address = address_none();
         } else {
             commission_address = msg_body~load_msg_addr();
             changing_commission_address_time = now();
         }
     } elseif (op == OP::CANCEL_CHANGING_COMMISSION_ADDRESS) { ;; cancel changing commission address
-        if (commission_address.preload_uint(2) != 0) {
-            commission_address = begin_cell().store_uint(0, 2).end_cell().begin_parse();
+        if (~ is_address_none(commission_address)) {
+            commission_address = address_none();
         }
     } elseif (op == OP::CHANGE_FINANCIAL_CODE) { ;; upgrade financial code
         slice financial_code_slice = begin_parse(financial_code);
@@ -248,7 +247,7 @@ global cell owners_addresses_info;
             changing_financial_code_time = now();
         } else {
             throw_unless(ERROR::UPDATE_DELAY_HAS_NOT_PASSED_YET, now() - changing_financial_code_time >= TIME::UPDATE_DELAY);
-            send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_uint(FIN_OP::UPDATE_CODE, 32).store_ref(financial_code).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
+            send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_op(FIN_OP::UPDATE_CODE).store_ref(financial_code).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
             financial_code = begin_cell().end_cell();
         }
     } elseif (op == OP::CANCEL_CHANGING_FINANCIAL_CODE) { ;; upgrade financial code
@@ -257,36 +256,25 @@ global cell owners_addresses_info;
             financial_code = begin_cell().end_cell();
         }
     } elseif (op == OP::SEND_COMMISSION_FROM_FINANCIAL) { ;; send commission from financial
-        send_msg(financial_address, MIN_TON_FOR_SEND_COMMISSION, begin_cell().store_uint(FIN_OP::SEND_COMMISSION, 32).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
+        send_msg(financial_address, MIN_TON_FOR_SEND_COMMISSION, begin_cell().store_op(FIN_OP::SEND_COMMISSION).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
     } elseif (op == OP::TRANFER_JETTON_FROM_FINANCIAL) {
         slice jetton_wallet_address = msg_body~load_msg_addr();
         slice destination_address = msg_body~load_msg_addr();
         int jetton_amount = msg_body~load_coins();
 
         cell transfer_payload = begin_cell()
-        .store_uint(FIN_OP::TRANSFER_JETTON, 32)
-        .store_slice(jetton_wallet_address)
-        .store_slice(destination_address)
-        .store_coins(jetton_amount)
-        .end_cell();
+            .store_op(FIN_OP::TRANSFER_JETTON)
+            .store_slice(jetton_wallet_address)
+            .store_slice(destination_address)
+            .store_coins(jetton_amount)
+            .end_cell();
 
-        send_msg(financial_address, MIN_TON_FOR_TRANSFER_JETTON, transfer_payload, FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
+        send_msg(financial_address, MIN_TON_FOR_TRANSFER_JETTON, transfer_payload, FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
+
     } elseif (op == OP::RETURN_TON) {
         slice destination_address = msg_body~load_msg_addr();
         int balance = pair_first(get_balance());
         send_msg(destination_address, balance - MIN_TON_FOR_STORAGE, null(), FLAGS::NON_BOUNCEABLE,  SEND_MODE::IGNORE_ERRORS);
-    } elseif (op == OP::FORCE_QUEUE_CLEARING) {
-        pending_queries = new_dict();
-        cell owners = owners_addresses_info;
-        do {
-            var (owners', addr, info, f) = owners.udict_delete_get_min(256);
-            f~touch();
-            if (f) {
-                (int i, _) = unpack_owner_address_info(info);
-                owners_addresses_info~udict_set_builder(256, addr, pack_owner_address_info(i, 0));
-                owners = owners';
-            }
-        } until (~ f);
     }
     return pack_temp_upgrade(admin_address, changing_admin_time, transaction_address, changing_transaction_address_time, commission_factor, changing_commission_time, commission_address, changing_commission_address_time, changing_content_time, changing_financial_code_time, jetton_content, financial_code);
 }
@@ -329,13 +317,13 @@ global cell owners_addresses_info;
         temp_upgrade = execute_op_code(msg, financial_address, temp_upgrade);
     } else {
         pending_queries~udict_set_builder(64, query_id, begin_cell()
-        .store_int(-1, 1)
-        .store_uint(creator_addr, 256)
-        .store_uint(cnt, 8)
-        .store_uint(cnt_bits, n)
-        .store_slice(msg));
+          .store_int(-1, 1)
+          .store_uint(creator_addr, 256)
+          .store_uint(cnt, 8)
+          .store_uint(cnt_bits, n)
+          .store_slice(msg));
     }
-    return (pending_queries, owners_addresses_info, temp_upgrade);
+  return (pending_queries, owners_addresses_info, temp_upgrade);
 }
 
 () cleanup_queries(int bound) impure {
@@ -387,7 +375,7 @@ global cell owners_addresses_info;
 
     int query_wallet_id = in_msg_body~load_uint(32);
     throw_unless(ERROR::WALLET_ID_DOES_NOT_MATCH, query_wallet_id == wallet_id);
-    int query_id = in_msg_body~load_uint(64);
+    int query_id = in_msg_body~load_query_id();
     var bound = (now() << 32);
     throw_if(ERROR::INVALID_QUERY_ID, query_id < bound);
     throw_if(ERROR::INVALID_QUERY_ID, query_id > (bound + (TIME::MAX_DELAY_FOR_QUERY_ID << 32)));
@@ -440,7 +428,7 @@ global cell owners_addresses_info;
     int query_wallet_id = in_msg~load_uint(32);
     throw_unless(ERROR::WALLET_ID_DOES_NOT_MATCH, query_wallet_id == wallet_id);
 
-    int query_id = in_msg~load_uint(64);
+    int query_id = in_msg~load_query_id();
     (slice query, var found?) = pending_queries.udict_get?(64, query_id);
     throw_if(ERROR::QUERY_HAS_ALREADY_BEEN_COMPLETED, found?);
     var bound = (now() << 32);

@@ -1,8 +1,8 @@
-import {Blockchain, SandboxContract, TreasuryContract} from '@ton-community/sandbox';
-import {beginCell, Cell, toNano} from 'ton-core';
+import {Blockchain, SandboxContract, TreasuryContract} from '@ton/sandbox';
+import {beginCell, Cell, toNano} from '@ton/core';
 import {AdminMultisig, AdminMultisigErrors, TempConfig} from '../wrappers/AdminMultisig';
-import '@ton-community/test-utils';
-import {compile} from '@ton-community/blueprint';
+import '@ton/test-utils';
+import {compile} from '@ton/blueprint';
 import {getOrderByPayload} from "../wrappers/utils/MultisigOrder";
 import {
     getCancelChangingAdminMultisigPayload,
@@ -16,14 +16,9 @@ import {
     getChangeContentPayload,
     getChangeTransactionMultisigPayload,
     getSendCommissionPayload,
-    getChangeFinancialCodePayload,
-    getAdminMultisigInternalPayload,
-    getTransferJettonPayload,
-    getReturnTonPayload,
-    getForceQueueClearing
+    getChangeFinancialCodePayload, getAdminMultisigInternalPayload, getTransferJettonPayload, getReturnTonPayload
 } from "../wrappers/utils/AdminMultisigUtils";
 import {buildJettonOnchainMetadata} from "../wrappers/utils/ContentUtils";
-import now = jest.now;
 import {mnemonicNew, mnemonicToPrivateKey} from "ton-crypto";
 import {KeyPair} from "ton-crypto/dist/primitives/nacl";
 import {FinancialOpcodes} from "../wrappers/Financial";
@@ -277,7 +272,7 @@ describe('AdminMultisig', () => {
 
         const multisig = await deployMultisig(n, {
             adminMultisigAddress: newAdmin.address.toString(),
-            changingAdminMultisigTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
+            changingAdminMultisigTime: Math.floor(Date.now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
         const changeAdminMultisigPayload = getChangeAdminMultisigPayload(newAdmin.address.toString())
         const changeAdminMultisigMsg = getAdminMultisigInternalPayload(changeAdminMultisigPayload)
@@ -412,7 +407,7 @@ describe('AdminMultisig', () => {
 
     it('[internal] should decrease flood for owner', async () => {
         const n = 3
-        blockchain.now = Math.floor(now() / 1000)
+        blockchain.now = Math.floor(Date.now() / 1000)
         const multisig = await deployMultisig(n)
         const newAdmin = await blockchain.treasury('newAdmin')
         const changeAdminMultisigPayload = getChangeAdminMultisigPayload(newAdmin.address.toString())
@@ -424,8 +419,8 @@ describe('AdminMultisig', () => {
         let owner0Flood = await multisig.getOwnerFlood(owner0.address.toString())
         expect(owner0Flood.flood).toBe(initOwner0Flood.flood + 1)
         initOwner0Flood = owner0Flood
-        blockchain.now = Math.floor(now() / 1000) + 60 * 60 * 20
-        const changeAdminMultisigMsg2 = getAdminMultisigInternalPayload(changeAdminMultisigPayload, 0, blockchain.now - Math.floor(now() / 1000) + 60 * 60 * 20)
+        blockchain.now = Math.floor(Date.now() / 1000) + 60 * 60 * 20
+        const changeAdminMultisigMsg2 = getAdminMultisigInternalPayload(changeAdminMultisigPayload, 0, blockchain.now - Math.floor(Date.now() / 1000) + 60 * 60 * 20)
         const owner1 = await blockchain.treasury('owner1')
         const result = await multisig.sendInternal(owner1.getSender(), tonAmount, changeAdminMultisigMsg2)
 
@@ -439,75 +434,6 @@ describe('AdminMultisig', () => {
 
         owner0Flood = await multisig.getOwnerFlood(owner0.address.toString())
         expect(owner0Flood.flood).toBe(initOwner0Flood.flood - 1)
-    })
-
-    it('should force clear pending_queries', async () => {
-        const n = 3
-        const multisig = await deployMultisig(n)
-        const newAdmin = await blockchain.treasury('newAdmin')
-        const changeAdminMultisigPayload = getChangeAdminMultisigPayload(newAdmin.address.toString())
-
-        const tonAmount = toNano('0.1')
-
-        const owner0 = await blockchain.treasury('owner0')
-
-        for (let i = 0; i < 10; i++) {
-            let changeAdminMultisigMsg = getAdminMultisigInternalPayload(changeAdminMultisigPayload,  0, 7200 + i)
-            let result = await multisig.sendInternal(owner0.getSender(), tonAmount, changeAdminMultisigMsg)
-            expect(result.transactions.length).toBe(2)
-
-            expect(result.transactions).toHaveTransaction({
-                from: owner0.address,
-                to: multisig.address,
-                value: tonAmount,
-                success: true,
-            })
-        }
-
-        let pendingQueries = await multisig.getPendingQueries()
-        expect(pendingQueries).toBeInstanceOf(Cell)
-
-        let owner0Flood = await multisig.getOwnerFlood(owner0.address.toString())
-        expect(owner0Flood.flood).toBe(10)
-
-        const forcePayload = getForceQueueClearing()
-        const forceOrder = getOrderByPayload(forcePayload, 0, 7300)
-
-        for (let i = 0; i < n; i++) {
-            forceOrder.sign(i, keypairs[i].secretKey)
-        }
-
-        const result = await multisig.sendOrder(forceOrder, keypairs[0].secretKey, 0)
-        expect(result.transactions.length).toBe(1)
-        expect(result.transactions).toHaveTransaction({
-            to: multisig.address,
-            exitCode: AdminMultisigErrors.noErrors
-        })
-
-        owner0Flood = await multisig.getOwnerFlood(owner0.address.toString())
-        expect(owner0Flood.flood).toBe(0)
-
-        pendingQueries = await multisig.getPendingQueries()
-        expect(pendingQueries).toBe(null)
-
-        for (let i = 0; i < 10; i++) {
-            let changeAdminMultisigMsg = getAdminMultisigInternalPayload(changeAdminMultisigPayload,  0, 7300 + i)
-            let result = await multisig.sendInternal(owner0.getSender(), tonAmount, changeAdminMultisigMsg)
-            expect(result.transactions.length).toBe(2)
-
-            expect(result.transactions).toHaveTransaction({
-                from: owner0.address,
-                to: multisig.address,
-                value: tonAmount,
-                success: true,
-            })
-        }
-
-        owner0Flood = await multisig.getOwnerFlood(owner0.address.toString())
-        expect(owner0Flood.flood).toBe(10)
-
-        pendingQueries = await multisig.getPendingQueries()
-        expect(pendingQueries).toBeInstanceOf(Cell)
     })
 
     it('should throw an error if signed by a non-owner', async () => {
@@ -662,7 +588,7 @@ describe('AdminMultisig', () => {
             changeAdminMultisigOrder2.sign(i, keypairs[i].secretKey)
         }
 
-        const time = Math.floor(now() / 1000);
+        const time = Math.floor(Date.now() / 1000);
         const result1 = await multisig.sendOrder(changeAdminMultisigOrder1, keypairs[0].secretKey, 0)
         expect(result1.transactions.length).toBe(1)
         expect(result1.transactions).toHaveTransaction({
@@ -697,7 +623,7 @@ describe('AdminMultisig', () => {
         const newAdmin = await blockchain.treasury('newAdmin')
         const multisig = await deployMultisig(n, {
             adminMultisigAddress: newAdmin.address.toString(),
-            changingAdminMultisigTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
+            changingAdminMultisigTime: Math.floor(Date.now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
         const initialTemp = await multisig.getTempConfig()
         expect(initialTemp.adminMultisigAddress).toBe(newAdmin.address.toString())
@@ -742,7 +668,7 @@ describe('AdminMultisig', () => {
             cancelChangingAdminMultisigOrder2.sign(i, keypairs[i].secretKey)
         }
 
-        const time = Math.floor(now() / 1000);
+        const time = Math.floor(Date.now() / 1000);
         await multisig.sendOrder(changeAdminMultisigOrder, keypairs[0].secretKey, 0)
         const temp1 = await multisig.getTempConfig()
         expect(temp1.adminMultisigAddress).toBe(newAdmin.address.toString())
@@ -775,7 +701,7 @@ describe('AdminMultisig', () => {
             changeTransactionMultisigOrder1.sign(i, keypairs[i].secretKey)
             changeTransactionMultisigOrder2.sign(i, keypairs[i].secretKey)
         }
-        const time = Math.floor(now() / 1000);
+        const time = Math.floor(Date.now() / 1000);
         const result1 = await multisig.sendOrder(changeTransactionMultisigOrder1, keypairs[0].secretKey, 0)
         expect(result1.transactions.length).toBe(1)
         expect(result1.transactions).toHaveTransaction({
@@ -810,7 +736,7 @@ describe('AdminMultisig', () => {
         const newAdmin = await blockchain.treasury('newAdmin')
         const multisig = await deployMultisig(n, {
             transactionMultisigAddress: newAdmin.address.toString(),
-            changingTransactionMultisigTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
+            changingTransactionMultisigTime: Math.floor(Date.now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
         const initialTemp = await multisig.getTempConfig()
         expect(initialTemp.transactionMultisigAddress).toBe(newAdmin.address.toString())
@@ -854,7 +780,7 @@ describe('AdminMultisig', () => {
             cancelChangingTransactionMultisigOrder1.sign(i, keypairs[i].secretKey)
             cancelChangingTransactionMultisigOrder2.sign(i, keypairs[i].secretKey)
         }
-        const time = Math.floor(now() / 1000);
+        const time = Math.floor(Date.now() / 1000);
         await multisig.sendOrder(changeTransactionMultisigOrder, keypairs[0].secretKey, 0)
         const temp1 = await multisig.getTempConfig()
         expect(temp1.transactionMultisigAddress).toBe(newAdmin.address.toString())
@@ -897,7 +823,7 @@ describe('AdminMultisig', () => {
             changeContentOrder1.sign(i, keypairs[i].secretKey)
             changeContentOrder2.sign(i, keypairs[i].secretKey)
         }
-        const time = Math.floor(now() / 1000);
+        const time = Math.floor(Date.now() / 1000);
         const result1 = await multisig.sendOrder(changeContentOrder1, keypairs[0].secretKey, 0)
         expect(result1.transactions.length).toBe(1)
         expect(result1.transactions).toHaveTransaction({
@@ -945,7 +871,7 @@ describe('AdminMultisig', () => {
         }
         const multisig = await deployMultisig(n, {
             jettonContent: content,
-            changingContentTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
+            changingContentTime: Math.floor(Date.now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
 
         const initialTemp = await multisig.getTempConfig()
@@ -1007,7 +933,7 @@ describe('AdminMultisig', () => {
             cancelChangingContentOrder.sign(i, keypairs[i].secretKey)
         }
 
-        const time = Math.floor(now() / 1000);
+        const time = Math.floor(Date.now() / 1000);
         await multisig.sendOrder(changeContentOrder, keypairs[0].secretKey, 0)
         const temp1 = await multisig.getTempConfig()
         expect(temp1.jettonContent?.name).toBe('FNZ')
@@ -1070,7 +996,7 @@ describe('AdminMultisig', () => {
 
 
         const result1 = await multisig.sendOrder(changeCommissionFactorOrder1, keypairs[0].secretKey, 0)
-        const time = Math.floor(now() / 1000);
+        const time = Math.floor(Date.now() / 1000);
         expect(result1.transactions.length).toBe(1)
         expect(result1.transactions).toHaveTransaction({
             to: multisig.address,
@@ -1104,7 +1030,7 @@ describe('AdminMultisig', () => {
         const commissionFactor = 0
         const multisig = await deployMultisig(n, {
             commissionFactor,
-            changingCommissionTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
+            changingCommissionTime: Math.floor(Date.now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
 
         const initialTemp = await multisig.getTempConfig()
@@ -1154,7 +1080,7 @@ describe('AdminMultisig', () => {
 
 
         await multisig.sendOrder(changeCommissionFactorOrder, keypairs[0].secretKey, 0)
-        const time = Math.floor(now() / 1000);
+        const time = Math.floor(Date.now() / 1000);
 
         const temp1 = await multisig.getTempConfig()
         expect(temp1.commissionFactor).toBe(newCommissionFactor)
@@ -1186,7 +1112,7 @@ describe('AdminMultisig', () => {
             changeCommissionAddressOrder2.sign(i, keypairs[i].secretKey)
         }
 
-        const time = Math.floor(now() / 1000);
+        const time = Math.floor(Date.now() / 1000);
         const result1 = await multisig.sendOrder(changeCommissionAddressOrder1, keypairs[0].secretKey, 0)
         expect(result1.transactions.length).toBe(1)
         expect(result1.transactions).toHaveTransaction({
@@ -1221,7 +1147,7 @@ describe('AdminMultisig', () => {
         const commissionWallet = await blockchain.treasury('newCommissionWallet')
         const multisig = await deployMultisig(n, {
             commissionAddress: commissionWallet.address.toString(),
-            changingCommissionAddressTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
+            changingCommissionAddressTime: Math.floor(Date.now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
 
         const initialTemp = await multisig.getTempConfig()
@@ -1269,7 +1195,7 @@ describe('AdminMultisig', () => {
             cancelChangingCommissionAddressOrder.sign(i, keypairs[i].secretKey)
         }
 
-        const time = Math.floor(now() / 1000);
+        const time = Math.floor(Date.now() / 1000);
         await multisig.sendOrder(changeCommissionAddressOrder, keypairs[0].secretKey, 0)
         const temp1 = await multisig.getTempConfig()
         expect(temp1.commissionAddress).toBe(newCommissionWallet.address.toString())
@@ -1301,7 +1227,7 @@ describe('AdminMultisig', () => {
             changeFinancialCodeOrder2.sign(i, keypairs[i].secretKey)
         }
 
-        const time = Math.floor(now() / 1000);
+        const time = Math.floor(Date.now() / 1000);
         const result1 = await multisig.sendOrder(changeFinancialCodeOrder1, keypairs[0].secretKey, 0)
         expect(result1.transactions.length).toBe(1)
         expect(result1.transactions).toHaveTransaction({
@@ -1335,7 +1261,7 @@ describe('AdminMultisig', () => {
         const n = 3
         const multisig = await deployMultisig(n, {
             newFinancialCode: await compile("NewFinancialForUpdateCodeTest"),
-            changingFinancialCodeTime: Math.floor(now() / 1000) - 60 * 60 * 180 // now - 180 hours
+            changingFinancialCodeTime: Math.floor(Date.now() / 1000) - 60 * 60 * 180 // now - 180 hours
         })
 
         const initialTemp = await multisig.getTempConfig()
@@ -1384,7 +1310,7 @@ describe('AdminMultisig', () => {
             cancelChangingCommissionAddressOrder.sign(i, keypairs[i].secretKey)
         }
 
-        const time = Math.floor(now() / 1000);
+        const time = Math.floor(Date.now() / 1000);
         await multisig.sendOrder(changeCommissionAddressOrder, keypairs[0].secretKey, 0)
         const temp1 = await multisig.getTempConfig()
         expect(temp1.commissionAddress).toBe(newCommissionWallet.address.toString())

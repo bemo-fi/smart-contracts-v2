@@ -1,5 +1,5 @@
-import {Address, toNano} from 'ton-core'
-import {NetworkProvider} from '@ton-community/blueprint'
+import {Address, toNano} from '@ton/core'
+import {NetworkProvider} from '@ton/blueprint'
 import {NominatorPool} from "../wrappers/NominatorPool";
 
 export async function run(provider: NetworkProvider) {

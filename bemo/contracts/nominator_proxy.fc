@@ -43,26 +43,26 @@ const ERROR::DEPOSIT_HAS_ALREADY_BEEN_MADE = 207;
 (int, int, slice, slice, int, int, slice) load_data() inline {
     slice ds = get_data().begin_parse();
     return (
-        ds~load_uint(32), ;; wallet_id
-        ds~load_coins(), ;; deposit_amount
-        ds~load_msg_addr(), ;; financial_address
-        ds~load_msg_addr(), ;; nominator_pool_address
-        ds~load_uint(64), ;; deposit_time
-        ds~load_uint(64), ;; withdrawn_time
-        ds~load_msg_addr() ;; last_withdraw_address - last address that requested a withdrawal
+            ds~load_uint(32), ;; wallet_id
+            ds~load_coins(), ;; deposit_amount
+            ds~load_msg_addr(), ;; financial_address
+            ds~load_msg_addr(), ;; nominator_pool_address
+            ds~load_uint(64), ;; deposit_time
+            ds~load_uint(64), ;; withdrawn_time
+            ds~load_msg_addr() ;; last_withdraw_address - last address that requested a withdrawal
     );
 }
 
 () save_data(int wallet_id, int deposit_amount, slice financial_address, slice nominator_pool_address, int deposit_time, int withdrawn_time, slice last_withdraw_address) impure inline {
     set_data(begin_cell()
-    .store_uint(wallet_id, 32)
-    .store_coins(deposit_amount)
-    .store_slice(financial_address)
-    .store_slice(nominator_pool_address)
-    .store_uint(deposit_time, 64)
-    .store_uint(withdrawn_time, 64)
-    .store_slice(last_withdraw_address)
-    .end_cell()
+            .store_uint(wallet_id, 32)
+            .store_coins(deposit_amount)
+            .store_slice(financial_address)
+            .store_slice(nominator_pool_address)
+            .store_uint(deposit_time, 64)
+            .store_uint(withdrawn_time, 64)
+            .store_slice(last_withdraw_address)
+            .end_cell()
     );
 }
 
@@ -71,22 +71,22 @@ const ERROR::DEPOSIT_HAS_ALREADY_BEEN_MADE = 207;
 
 () send_msg_to_nominator(slice nominator_pool_address, int deposit_amount, deposit?, int mode) impure inline {
     cell msg = begin_cell()
-    .store_uint(FLAGS::BOUNCEABLE, 6) ;; flags
-    .store_slice(nominator_pool_address)
-    .store_coins(deposit_amount)
-    .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
-    .store_uint(0, 32)
-    .store_uint(deposit? ? ACTION::DEPOSIT : ACTION::WITHDRAW, 8) ;; if true "d" - for deposit, if false "w" - for withdraw
-    .end_cell();
+            .store_msg_flags_and_address_none(FLAGS::BOUNCEABLE)
+            .store_slice(nominator_pool_address)
+            .store_coins(deposit_amount)
+            .store_prefix_only_body()
+            .store_op(OP::SIMPLE_TRANSFER)
+            .store_uint(deposit? ? ACTION::DEPOSIT : ACTION::WITHDRAW, 8) ;; if true "d" - for deposit, if false "w" - for withdraw
+            .end_cell();
     send_raw_message(msg, mode);
 }
 
 () on_bounce (slice in_msg_body, int msg_value) impure {
-    in_msg_body~skip_bits(32); ;; 0xFFFFFFFF
+    in_msg_body~skip_bounced_prefix();
 
     var (wallet_id, deposit_amount, financial_address, nominator_pool_address, deposit_time, withdrawn_time, last_withdraw_address) = load_data();
 
-    int op = in_msg_body~load_uint(32);
+    int op = in_msg_body~load_op();
     throw_unless(ERROR::NOT_BOUNCEABLE_OP, op == OP::SIMPLE_TRANSFER);
 
     int action = in_msg_body~load_uint(8);
@@ -97,10 +97,10 @@ const ERROR::DEPOSIT_HAS_ALREADY_BEEN_MADE = 207;
         if (deposit_amount <= MIN_NOMINATOR_STAKE) {
             deposit_amount = 0;
         }
-        send_msg(financial_address, 0, begin_cell().store_uint(FIN_OP::ACCEPT_TON, 32).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT);
+        send_msg(financial_address, 0, begin_cell().store_op(FIN_OP::ACCEPT_TON).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::CARRY_ALL_REMAINING_MESSAGE_VALUE);
     } else {
-        send_msg(last_withdraw_address, 0, null(), FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT);
-        last_withdraw_address = begin_cell().store_uint(0, 2).end_cell().begin_parse();
+        send_msg(last_withdraw_address, 0, null(), FLAGS::NON_BOUNCEABLE, SEND_MODE::CARRY_ALL_REMAINING_MESSAGE_VALUE);
+        last_withdraw_address = address_none();
     }
 
     save_data(wallet_id, deposit_amount, financial_address, nominator_pool_address, deposit_time, withdrawn_time, last_withdraw_address);
@@ -109,9 +109,7 @@ const ERROR::DEPOSIT_HAS_ALREADY_BEEN_MADE = 207;
 
 ;; =============== recv =============================
 
-() recv_internal(int msg_value, cell in_msg_full, slice in_msg_body) impure {
-    int balance = pair_first(get_balance());
-
+() recv_internal(int balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
     slice cs = in_msg_full.begin_parse();
     int flags = cs~load_uint(4);
 
@@ -122,7 +120,7 @@ const ERROR::DEPOSIT_HAS_ALREADY_BEEN_MADE = 207;
 
     slice sender_address = cs~load_msg_addr();
 
-    int op = in_msg_body.slice_empty?() ? OP::SIMPLE_TRANSFER : in_msg_body~load_uint(32);
+    int op = in_msg_body.slice_empty?() ? OP::SIMPLE_TRANSFER : in_msg_body~load_op();
 
     var (wallet_id, deposit_amount, financial_address, nominator_pool_address, deposit_time, withdrawn_time, last_withdraw_address) = load_data();
 
@@ -139,20 +137,20 @@ const ERROR::DEPOSIT_HAS_ALREADY_BEEN_MADE = 207;
             deposit_time = now();
             deposit_amount = msg_value;
 
-            send_msg_to_nominator(nominator_pool_address, msg_value, true, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
+            send_msg_to_nominator(nominator_pool_address, msg_value, true, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
 
         } elseif (equal_slices(sender_address, nominator_pool_address)) {
             if (msg_value <= TWO_TON){
-                if (last_withdraw_address.preload_uint(2) != 0) {
-                    send_msg(last_withdraw_address, 0, null(), FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT + SEND_MODE::IGNORE_ERRORS);
-                    last_withdraw_address = begin_cell().store_uint(0, 2).end_cell().begin_parse();
+                if (~ is_address_none(last_withdraw_address)) {
+                    send_msg(last_withdraw_address, 0, null(), FLAGS::NON_BOUNCEABLE, SEND_MODE::CARRY_ALL_REMAINING_MESSAGE_VALUE + SEND_MODE::IGNORE_ERRORS);
+                    last_withdraw_address = address_none();
                 } else {
-                    send_msg(financial_address, 0, begin_cell().store_uint(FIN_OP::ACCEPT_TON, 32).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::REMAINING_AMOUNT + SEND_MODE::IGNORE_ERRORS);
+                    send_msg(financial_address, 0, begin_cell().store_op(FIN_OP::ACCEPT_TON).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::CARRY_ALL_REMAINING_MESSAGE_VALUE + SEND_MODE::IGNORE_ERRORS);
                 }
             } else {
                 int reward = msg_value - deposit_amount;
                 reward = reward < 0 ? 0 : reward;
-                send_msg(financial_address, msg_value, begin_cell().store_uint(FIN_OP::ACCEPT_REWARD, 32).store_coins(reward).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEE_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
+                send_msg(financial_address, msg_value, begin_cell().store_op(FIN_OP::ACCEPT_REWARD).store_coins(reward).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
                 deposit_amount = 0;
             }
         } else {
@@ -166,7 +164,7 @@ const ERROR::DEPOSIT_HAS_ALREADY_BEEN_MADE = 207;
             withdrawn_time = now();
             last_withdraw_address = sender_address;
 
-            send_msg_to_nominator(nominator_pool_address, 0, false, SEND_MODE::REMAINING_AMOUNT + SEND_MODE::IGNORE_ERRORS);
+            send_msg_to_nominator(nominator_pool_address, 0, false, SEND_MODE::CARRY_ALL_REMAINING_MESSAGE_VALUE + SEND_MODE::IGNORE_ERRORS);
         }
         save_data(wallet_id, deposit_amount, financial_address, nominator_pool_address, deposit_time, withdrawn_time, last_withdraw_address);
         return ();
@@ -174,7 +172,7 @@ const ERROR::DEPOSIT_HAS_ALREADY_BEEN_MADE = 207;
 
     if (op == OP::RETURN_TON_TO_FINANCIAL) {
         throw_unless(ERROR::INSUFFICIENT_BALANCE, balance > MIN_TON_FOR_STORAGE);
-        send_msg(financial_address, balance - MIN_TON_FOR_STORAGE, begin_cell().store_uint(9, 32).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::IGNORE_ERRORS);
+        send_msg(financial_address, balance - MIN_TON_FOR_STORAGE, begin_cell().store_op(FIN_OP::ACCEPT_TON).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::IGNORE_ERRORS);
         return ();
     }
 
