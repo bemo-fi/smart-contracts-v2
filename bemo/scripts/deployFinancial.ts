@@ -1,10 +1,18 @@
-import {toNano} from '@ton/core'
+import {beginCell, Cell, toNano} from '@ton/core'
 import {Financial} from '../wrappers/Financial'
 import {compile, NetworkProvider} from '@ton/blueprint'
 
 export async function run(provider: NetworkProvider) {
+    const unstakeRequestCodeRaw = await compile('UnstakeRequest');
+    let lib_unstake_prep = beginCell().storeUint(2, 8).storeBuffer(unstakeRequestCodeRaw.hash()).endCell();
+    const unstakeRequestCode = new Cell({exotic: true, bits: lib_unstake_prep.bits, refs: lib_unstake_prep.refs});
+
+    const jettonWalletCodeRaw = await compile('JettonWallet');
+    let lib_jetton_prep = beginCell().storeUint(2, 8).storeBuffer(jettonWalletCodeRaw.hash()).endCell();
+    const jettonWalletCode = new Cell({ exotic: true, bits: lib_jetton_prep.bits, refs: lib_jetton_prep.refs});
+
     const financial = provider.open(Financial.createFromConfig({
-        unstakeRequestCode: await compile("UnstakeRequest"),
+        unstakeRequestCode: unstakeRequestCode,
         transactionAdminAddress: "TRANSACTION MULTISIG ADDRESS",
         commissionAddress: "COMMISION ADDRESS",
         tonTotalSupply: 1,
@@ -18,7 +26,7 @@ export async function run(provider: NetworkProvider) {
             decimals: "9"
         },
         adminAddress: "ADMIN MULTISIG ADDRESS",
-        jettonWalletCode: await compile('JettonWallet')
+        jettonWalletCode: jettonWalletCode
     }, await compile('Financial'), 0));
 
     console.log('---------------------------------');
