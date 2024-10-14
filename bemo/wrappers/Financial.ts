@@ -372,13 +372,17 @@ export class Financial implements Contract {
 
     async sendGetPools(
         provider: ContractProvider,
-        via: Sender, value: bigint
+        via: Sender, value: bigint,
+        opts: {
+            queryId?: number
+        }
     ) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
                 .storeUint(FinancialOpcodes.getPools, 32)
+                .storeUint(opts.queryId ?? 0, 64)
                 .endCell(),
         })
     }

@@ -368,11 +368,12 @@ int is_resolvable?(slice addr) inline {
 
     if (op == OP::GET_POOLS) { ;; return ton and jetton pools values
         throw_unless(ERROR::INSUFFICIENT_MSG_VALUE, msg_value >= MINIMUM_TON_FOR_POOLS);
-
+        int query_id = in_msg_body~load_query_id();
         in_msg_body.end_parse();
 
         var msg = begin_cell()
         .store_op(OP::GET_POOLS)
+        .store_query_id(query_id)
         .store_coins(jetton_total_supply)
         .store_coins(ton_total_supply)
         .end_cell();

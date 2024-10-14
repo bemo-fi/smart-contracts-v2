@@ -649,13 +649,13 @@ describe('Financial', () => {
         const anyone = await blockchain.treasury('anyone')
         const tonAmount = toNano('0.1')
 
-        const result = await financial.sendGetPools(anyone.getSender(), tonAmount)
+        const result = await financial.sendGetPools(anyone.getSender(), tonAmount, {})
 
         expect(result.transactions.length).toBe(3)
         expect(result.transactions).toHaveTransaction({
             from: financial.address,
             to: anyone.address,
-            body: beginCell().storeUint(FinancialOpcodes.getPools, 32).storeCoins(toNano(financialData.jettonTotalSupply)).storeCoins(toNano(financialData.tonTotalSupply)).endCell(),
+            body: beginCell().storeUint(FinancialOpcodes.getPools, 32).storeUint(0, 64).storeCoins(toNano(financialData.jettonTotalSupply)).storeCoins(toNano(financialData.tonTotalSupply)).endCell(),
             success: true
         })
 
@@ -663,7 +663,7 @@ describe('Financial', () => {
 
         const smallTonAmount = toNano('0.01')
 
-        const result2 = await financial.sendGetPools(anyone.getSender(), smallTonAmount)
+        const result2 = await financial.sendGetPools(anyone.getSender(), smallTonAmount, {})
 
         expect(result2.transactions.length).toBe(3)
         expect(result2.transactions).toHaveTransaction({
