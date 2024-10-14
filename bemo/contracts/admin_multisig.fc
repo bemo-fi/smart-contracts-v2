@@ -2,6 +2,8 @@
 
 #include "imports/stdlib.fc";
 #include "imports/utils.fc";
+#include "imports/multisig_utils.fc";
+
 #pragma version =0.4.4;
 
 ;; =============== consts =============================
@@ -54,9 +56,6 @@ const ERROR::WALLET_ID_DOES_NOT_MATCH = 33;
 const ERROR::QUERY_HAS_ALREADY_BEEN_COMPLETED = 34;
 const ERROR::INVALID_QUERY_ID = 35;
 const ERROR::NOT_ALL_OWNERS_CONFIRMED = 36;
-const ERROR::PUBLIC_KEY_NOT_FOUND = 37;
-const ERROR::INVALID_SIGNATURE = 38;
-const ERROR::ALREADY_SIGNED = 39;
 const ERROR::UPDATE_DELAY_HAS_NOT_PASSED_YET = 40;
 const ERROR::INSUFFICIENT_INTERNAL_MSG_VALUE = 41;
 const ERROR::SENDER_ADDRESS_NOT_FOUND = 42;
@@ -285,28 +284,6 @@ global cell owners_addresses_info;
         send_msg(destination_address, balance - MIN_TON_FOR_STORAGE, null(), FLAGS::NON_BOUNCEABLE,  SEND_MODE::IGNORE_ERRORS);
     }
     return pack_temp_upgrade(admin_address, changing_admin_time, transaction_address, changing_transaction_address_time, commission_factor, changing_commission_time, commission_address, changing_commission_address_time, changing_content_time, changing_financial_code_time, jetton_content, financial_code);
-}
-
-(int) check_signatures(cell public_keys, cell signatures, int hash) inline_ref {
-    int cnt = 0;
-    int cnt_bits = 0;
-    do {
-        slice cs = signatures.begin_parse();
-        slice signature = cs~load_bits(512);
-
-        int i = cs~load_uint(8);
-        signatures = cs~load_dict();
-
-        (slice public_key, var found?) = public_keys.udict_get?(8, i);
-        throw_unless(ERROR::PUBLIC_KEY_NOT_FOUND, found?);
-        throw_unless(ERROR::INVALID_SIGNATURE, check_signature(hash, signature, public_key.preload_uint(256)));
-
-        int mask = (1 << i);
-        throw_unless(ERROR::ALREADY_SIGNED, (cnt_bits & mask) == 0);
-        cnt_bits |= mask;
-        cnt += 1;
-    } until (cell_null?(signatures));
-    return cnt;
 }
 
 ;; =============== common multisig utils =============================

@@ -1,0 +1,25 @@
+const ERROR::PUBLIC_KEY_NOT_FOUND = 37;
+const ERROR::INVALID_SIGNATURE = 38;
+const ERROR::ALREADY_SIGNED = 39;
+
+(int) check_signatures(cell public_keys, cell signatures, int hash) inline_ref {
+    int cnt = 0;
+    int cnt_bits = 0;
+    do {
+        slice cs = signatures.begin_parse();
+        slice signature = cs~load_bits(512);
+
+        int i = cs~load_uint(8);
+        signatures = cs~load_dict();
+
+        (slice public_key, var found?) = public_keys.udict_get?(8, i);
+        throw_unless(ERROR::PUBLIC_KEY_NOT_FOUND, found?);
+        throw_unless(ERROR::INVALID_SIGNATURE, check_signature(hash, signature, public_key.preload_uint(256)));
+
+        int mask = (1 << i);
+        throw_unless(ERROR::ALREADY_SIGNED, (cnt_bits & mask) == 0);
+        cnt_bits |= mask;
+        cnt += 1;
+    } until (cell_null?(signatures));
+    return cnt;
+}
