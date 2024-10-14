@@ -4,7 +4,7 @@
 #include "imports/utils.fc";
 #include "imports/nominator_proxy_utils.fc";
 
-#pragma version >=0.4.0;
+#pragma version =0.4.4;
 
 ;; =============== consts =============================
 const MIN_TON_FOR_SEND_MSG = 10000000; ;; 0.01 TON

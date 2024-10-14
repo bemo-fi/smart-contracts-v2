@@ -4,7 +4,7 @@
 #include "imports/utils.fc";
 #include "imports/unstake_request_gas.fc";
 
-#pragma version >=0.4.0;
+#pragma version =0.4.4;
 
 ;; =============== consts =============================
 
