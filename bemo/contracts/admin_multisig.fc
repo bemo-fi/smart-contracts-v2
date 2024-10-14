@@ -65,6 +65,7 @@ const ERROR::MSG_DOESNT_MATCH = 44;
 const ERROR::QUERY_NOT_ACTIVE = 45;
 const ERROR::INVALID_COMMISSION_FACTOR = 46;
 const ERROR::EXPIRED_QUERY = 51;
+const ERROR::ZERO_ADDRESS = 52;
 
 ;; global
 global int wallet_id;
@@ -179,7 +180,9 @@ global cell owners_addresses_info;
             send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_op(FIN_OP::CHANGE_ADMIN).store_slice(admin_address).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
             admin_address = address_none();
         } else {
-            admin_address = msg_body~load_msg_addr();
+            slice address_to_assign = msg_body~load_msg_addr();
+            throw_if(ERROR::ZERO_ADDRESS, is_address_none(address_to_assign));
+            admin_address = address_to_assign;
             changing_admin_time = now();
         }
     } elseif (op == OP::CANCEL_CHANGING_ADMIN_MULTISIG) { ;; cancel changing admin multisig
@@ -192,7 +195,9 @@ global cell owners_addresses_info;
             send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_op(FIN_OP::CHANGE_TRANSACTION_ADMIN).store_slice(transaction_address).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
             transaction_address = address_none();
         } else {
-            transaction_address = msg_body~load_msg_addr();
+            slice address_to_assign = msg_body~load_msg_addr();
+            throw_if(ERROR::ZERO_ADDRESS, is_address_none(address_to_assign));
+            transaction_address = address_to_assign;
             changing_transaction_address_time = now();
         }
     } elseif (op == OP::CANCEL_CHANGING_TRANSACTION_MULTISIG) { ;; cancel changing transaction multisig
@@ -234,7 +239,8 @@ global cell owners_addresses_info;
             send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_op(FIN_OP::CHANGE_COMMISSION_ADDRESS).store_slice(commission_address).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
             commission_address = address_none();
         } else {
-            commission_address = msg_body~load_msg_addr();
+            slice address_to_assign = msg_body~load_msg_addr();
+            commission_address = address_to_assign;
             changing_commission_address_time = now();
         }
     } elseif (op == OP::CANCEL_CHANGING_COMMISSION_ADDRESS) { ;; cancel changing commission address

@@ -3,6 +3,7 @@
 #include "imports/stdlib.fc";
 #pragma version =0.4.4;
 
+const ERROR::ZERO_DATA_SIZE = 99;
 
 const int DEFAULT_DURATION = 3600 * 24 * 365 * 100; ;; 100 years, can top-up in any time
 const int ONE_TON = 1000000000;
@@ -22,6 +23,7 @@ cell empty() asm "<b b> PUSHREF";
 
     int initial_gas = gas_consumed();
     (int order_cells, int order_bits, _) = compute_data_size(lib_to_publish, 2048);
+    throw_if(ERROR::ZERO_DATA_SIZE, (order_cells <= 0) & (order_bits <= 0));
     int size_counting_gas = gas_consumed() - initial_gas;
 
     int to_reserve = get_simple_compute_fee(MASTERCHAIN, size_counting_gas) +
