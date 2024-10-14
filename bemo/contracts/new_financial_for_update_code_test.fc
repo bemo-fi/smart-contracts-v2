@@ -238,6 +238,11 @@ int is_resolvable?(slice addr) inline {
     }
 }
 
+() migrate(cell old_storage) impure method_id {
+    set_data(old_storage);
+    throw(0);
+}
+
 ;; =============== recv =============================
 
 () recv_internal(int balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
@@ -491,8 +496,12 @@ int is_resolvable?(slice addr) inline {
 
     if (op == OP::UPDATE_CODE) { ;; upgrade code
         throw_unless(ERROR::NOT_FROM_ADMIN, equal_slices(sender_address, admin_address));
-        var new_code = in_msg_body~load_ref();
+        cell old_storage_layout = get_data();
+        cell new_code = in_msg_body~load_ref();
+        in_msg_body.end_parse();
         set_code(new_code);
+        set_c3(new_code.begin_parse().bless());
+        migrate(old_storage_layout);
         return ();
     }
 
