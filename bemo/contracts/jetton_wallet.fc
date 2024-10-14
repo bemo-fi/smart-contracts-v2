@@ -24,6 +24,7 @@ const ERROR::NOT_FROM_OWNER = 705;
 const ERROR::INSUFFICIENT_JETTON_BALANCE = 706;
 const ERROR::NOT_FROM_JETTON_MASTER_OR_WALLET = 707;
 const ERROR::EMPTY_FORWARD_PAYLOAD = 708;
+const ERROR::WRONG_OP = 709;
 const ERROR::INVALID_RECEIVER_ADDRESS = 710;
 
 
@@ -214,7 +215,7 @@ const ERROR::INVALID_RECEIVER_ADDRESS = 710;
     in_msg_body~skip_bounced_prefix();
     (int balance, slice owner_address, slice jetton_master_address) = load_data();
     int op = in_msg_body~load_op();
-    throw_unless(ERROR::NOT_BOUNCEABLE_OP, (op == OP::INTERNAL_TRANSFER) | (op == OP::BURN_NOTIFICATION));
+    throw_unless(ERROR::WRONG_OP, (op == OP::INTERNAL_TRANSFER) | (op == OP::BURN_NOTIFICATION));
     in_msg_body~skip_query_id();
     int jetton_amount = in_msg_body~load_coins();
     save_data(balance + jetton_amount, owner_address, jetton_master_address);
