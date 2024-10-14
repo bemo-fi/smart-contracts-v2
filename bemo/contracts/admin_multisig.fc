@@ -240,6 +240,7 @@ global cell owners_addresses_info;
             commission_address = address_none();
         } else {
             slice address_to_assign = msg_body~load_msg_addr();
+            throw_if(ERROR::ZERO_ADDRESS, is_address_none(address_to_assign));
             commission_address = address_to_assign;
             changing_commission_address_time = now();
         }
