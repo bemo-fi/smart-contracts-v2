@@ -215,7 +215,7 @@ cell get_public_keys() method_id {
     );
 }
 
-(slice, slice) get_pool_proxy_addresses(slice validator_addr, int validator_reward_share, max_nominators_count, min_validator_stake, min_nominator_stake, wallet_id) method_id {
+(slice, slice) get_pool_proxy_addresses(slice validator_addr, int validator_reward_share, int max_nominators_count, int min_validator_stake, int min_nominator_stake, int wallet_id) method_id {
     load_data();
     var (_, validator_int_address) = parse_std_addr(validator_addr);
     slice nominator_pool_address = calculate_nominator_pool_address(validator_int_address, validator_reward_share, max_nominators_count, min_validator_stake, min_nominator_stake, nominator_pool_code);
