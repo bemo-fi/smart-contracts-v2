@@ -90,6 +90,7 @@ global cell owners_addresses_info;
     financial_address = ds~load_msg_addr();
     temp_upgrade = ds~load_ref();
     owners_addresses_info = ds~load_dict();
+    ds.end_parse();
 }
 
 () save_data() impure inline {

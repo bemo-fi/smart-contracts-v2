@@ -56,6 +56,7 @@ global cell nominator_pool_code;
     financial_address = ds~load_msg_addr();
     nominator_proxy_code = ds~load_ref();
     nominator_pool_code = ds~load_ref();
+    ds.end_parse();
 }
 
 () save_data() impure inline {

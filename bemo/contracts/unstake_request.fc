@@ -40,6 +40,7 @@ global int unlock_timestamp;
     jetton_amount = ds~load_coins();
     forward_payload = ds~load_maybe_ref();
     unlock_timestamp = ds~load_uint(32);
+    ds.end_parse();
 }
 
 () save_data() impure {

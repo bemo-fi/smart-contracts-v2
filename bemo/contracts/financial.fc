@@ -119,6 +119,8 @@ global cell unstake_request_code;
 
     next_unstake_request_index = lockup_config~load_uint(64);
     unstake_request_code = lockup_config~load_ref();
+    lockup_config.end_parse();
+    ds.end_parse();
 }
 
 () save_data() impure inline {
@@ -274,6 +276,7 @@ int is_resolvable?(slice addr) inline {
         int query_id = in_msg_body~load_query_id();
         int forward_ton_amount = in_msg_body~load_coins();
         cell forward_payload = in_msg_body~load_maybe_ref();
+        in_msg_body.end_parse();
 
         mint(query_id, sender_address, msg_value,  fwd_fee, forward_ton_amount, forward_payload);
         return ();
@@ -281,6 +284,7 @@ int is_resolvable?(slice addr) inline {
 
     if (op == OP::ACCEPT_REWARD) { ;; accept coins with reward
         int reward = in_msg_body~load_coins();
+        in_msg_body.end_parse();
         throw_unless(ERROR::MSG_VALUE_LESS_THAN_REWARD, msg_value >= reward);
 
         if (reward > 0) {
@@ -298,6 +302,7 @@ int is_resolvable?(slice addr) inline {
         slice owner_address = in_msg_body~load_msg_addr();
         slice receiver_address = in_msg_body~load_msg_addr();
         cell forward_payload = in_msg_body~load_maybe_ref();
+        in_msg_body.end_parse();
         throw_unless(ERROR::NOT_FROM_JETTON_WALLET,
                 equal_slices(calculate_user_jetton_wallet_address(owner_address, my_address(), jetton_wallet_code), sender_address)
         );
@@ -333,6 +338,7 @@ int is_resolvable?(slice addr) inline {
         var withdraw_ton_amount = in_msg_body~load_coins();
         var withdraw_jetton_amount = in_msg_body~load_coins(); ;; currently unused
         var forward_payload = in_msg_body~load_maybe_ref();
+        in_msg_body.end_parse();
 
         if (balance >= withdraw_ton_amount + msg_value) {
 
@@ -361,8 +367,9 @@ int is_resolvable?(slice addr) inline {
     }
 
     if (op == OP::GET_POOLS) { ;; return ton and jetton pools values
-
         throw_unless(ERROR::INSUFFICIENT_MSG_VALUE, msg_value >= MINIMUM_TON_FOR_POOLS);
+
+        in_msg_body.end_parse();
 
         var msg = begin_cell()
         .store_op(OP::GET_POOLS)
@@ -380,6 +387,7 @@ int is_resolvable?(slice addr) inline {
 
         int query_id = in_msg_body~load_query_id();
         cell custom_payload = in_msg_body~load_maybe_ref();
+        in_msg_body.end_parse();
 
         var msg = begin_cell()
         .store_op(OP::TAKE_CURRENT_QUOTE)
@@ -400,6 +408,7 @@ int is_resolvable?(slice addr) inline {
 
         slice owner_address = in_msg_body~load_msg_addr();
         int include_address? = in_msg_body~load_uint(1);
+        in_msg_body.end_parse();
 
         cell included_address = include_address?
                 ? begin_cell().store_slice(owner_address).end_cell()
@@ -425,6 +434,7 @@ int is_resolvable?(slice addr) inline {
     if (op == OP::CHANGE_ADMIN) { ;; change admin
         throw_unless(ERROR::NOT_FROM_ADMIN, equal_slices(sender_address, admin_address));
         admin_address = in_msg_body~load_msg_addr();
+        in_msg_body.end_parse();
         save_data();
         return ();
     }
@@ -432,6 +442,7 @@ int is_resolvable?(slice addr) inline {
     if (op == OP::CHANGE_TRANSACTION_ADMIN) { ;; change transaction admin
         throw_unless(ERROR::NOT_FROM_ADMIN, equal_slices(sender_address, admin_address));
         transaction_address = in_msg_body~load_msg_addr();
+        in_msg_body.end_parse();
         save_data();
         return ();
     }
@@ -439,6 +450,7 @@ int is_resolvable?(slice addr) inline {
     if (op == OP::CHANGE_CONTENT) { ;; change content, delete this for immutable tokens
         throw_unless(ERROR::NOT_FROM_ADMIN, equal_slices(sender_address, admin_address));
         content = in_msg_body~load_ref();
+        in_msg_body.end_parse();
         save_data();
         return ();
     }
@@ -446,6 +458,7 @@ int is_resolvable?(slice addr) inline {
     if (op == OP::CHANGE_COMMISSION_FACTOR) { ;; change commission factor
         throw_unless(ERROR::NOT_FROM_ADMIN, equal_slices(sender_address, admin_address));
         commission_factor = in_msg_body~load_uint(16);
+        in_msg_body.end_parse();
         throw_unless(ERROR::INVALID_COMMISSION_FACTOR, commission_factor <= COMMISSION_BASE);
         save_data();
         return ();
@@ -454,6 +467,7 @@ int is_resolvable?(slice addr) inline {
     if (op == OP::CHANGE_COMMISSION_ADDRESS) { ;; change commission address
         throw_unless(ERROR::NOT_FROM_ADMIN, equal_slices(sender_address, admin_address));
         commission_address = in_msg_body~load_msg_addr();
+        in_msg_body.end_parse();
         save_data();
         return ();
     }
@@ -466,6 +480,7 @@ int is_resolvable?(slice addr) inline {
         slice destination_address = in_msg_body~load_msg_addr();
         int amount = in_msg_body~load_coins();
         var payload = in_msg_body~load_maybe_ref();
+        in_msg_body.end_parse();
         throw_unless(ERROR::INSUFFICIENT_BALANCE, ton_balance_before_msg - lockup_supply - MIN_TON_FOR_STORAGE >= amount);
         send_msg(destination_address, amount, payload, FLAGS::BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
         return ();
@@ -511,6 +526,7 @@ int is_resolvable?(slice addr) inline {
         slice jetton_wallet_address = in_msg_body~load_msg_addr();
         slice destination_address = in_msg_body~load_msg_addr();
         int jetton_amount = in_msg_body~load_coins();
+        in_msg_body.end_parse();
         cell transfer_body = begin_cell()
                 .store_op(OP::TRANSFER_JETTON)
                 .store_query_id(0)
