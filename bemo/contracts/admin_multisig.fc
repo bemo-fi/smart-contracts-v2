@@ -369,6 +369,7 @@ global cell owners_addresses_info;
     load_data();
     slice sender_address = cs~load_msg_addr();
     (int wc, int addr) = parse_std_addr(sender_address);
+    throw_unless(ERROR::NOT_BASECHAIN, wc == BASECHAIN);
     (slice address_info, var found?) = owners_addresses_info.udict_get?(256, addr);
     throw_unless(ERROR::SENDER_ADDRESS_NOT_FOUND, found?);
     (int i, int flood) = unpack_owner_address_info(address_info);
