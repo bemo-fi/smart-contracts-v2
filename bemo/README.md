@@ -17,13 +17,12 @@ Starter template for a new TON project - FunC contracts, unit tests, compilation
 ## How to use
 * Run `npm create ton@latest`
 
-### Building a contract
-1. Interactively
-   1. Run `yarn blueprint build`
-   2. Choose the contract you'd like to build
-1. Non-interactively
-   1. Run `yarn blueprint build <CONTRACT>`
-   2. example: `yarn blueprint build pingpong`
+### Building contracts
+1. You need a compilation script in `compilables/<CONTRACT>.compile.ts` - [example](/example/compilables/Counter.compile.ts)
+2. Run interactive: &nbsp;&nbsp; `npx blueprint build` &nbsp; or &nbsp; `yarn blueprint build`
+3. Non-interactive: &nbsp; `npx/yarn blueprint build <CONTRACT>` &nbsp; OR build all contracts &nbsp; `yarn blueprint build --all`
+   * Example: `yarn blueprint build counter`
+4. Build results are generated in `build/<CONTRACT>.compiled.json`
 
 ### Deploying a contract
 1. Interactively
@@ -40,8 +39,14 @@ Starter template for a new TON project - FunC contracts, unit tests, compilation
    1. Run `yarn blueprint run <CONTRACT> --<NETWORK> --<DEPLOY_METHOD>`
    2. example: `yarn blueprint run pingpong --mainnet --tonconnect`
 
-### Testing
-1. Run `yarn test`
+
+### Running the test suites
+1. Run in terminal: &nbsp; `npx blueprint test` &nbsp; or &nbsp; `yarn blueprint test`
+2. Alternative method: &nbsp; `npm test` &nbsp; or &nbsp; `yarn test`
+3. You can specify test file to run:  &nbsp; `npm/yarn test <CONTRACT>`
+    * Example: `yarn test counter`
+
+> Learn more about writing tests from the Sandbox's documentation - [here](https://github.com/ton-org/sandbox#writing-tests).
 
 ## Adding your own contract
 1. Run `yarn blueprint create <CONTRACT>`
