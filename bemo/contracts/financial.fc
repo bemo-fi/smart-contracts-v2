@@ -180,7 +180,7 @@ int is_resolvable?(slice addr) inline {
             .end_cell();
 
     var msg = begin_cell()
-            .store_msg_flags_and_address_none(FLAGS::BOUNCEABLE)
+            .store_msg_flags_and_address_none(FLAGS::NON_BOUNCEABLE)
             .store_slice(to_wallet_address)
             .store_coins(transfer_ton_amount)
             .store_statinit_ref_and_body_ref(state_init, receive_msg)
