@@ -93,10 +93,7 @@ const ERROR::DEPOSIT_HAS_ALREADY_BEEN_MADE = 207;
     throw_unless(ERROR::UNKNOWN_ACTION, (action == ACTION::DEPOSIT) | (action == ACTION::WITHDRAW));
 
     if (action == ACTION::DEPOSIT) {
-        deposit_amount -= msg_value;
-        if (deposit_amount <= MIN_NOMINATOR_STAKE) {
-            deposit_amount = 0;
-        }
+        deposit_amount = 0;
         send_msg(financial_address, 0, begin_cell().store_op(FIN_OP::ACCEPT_TON).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::CARRY_ALL_REMAINING_MESSAGE_VALUE);
     } else {
         send_msg(last_withdraw_address, 0, null(), FLAGS::NON_BOUNCEABLE, SEND_MODE::CARRY_ALL_REMAINING_MESSAGE_VALUE);
