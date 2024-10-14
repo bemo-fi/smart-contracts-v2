@@ -221,12 +221,13 @@ global cell owners_addresses_info;
         }
     } elseif (op == OP::CHANGE_COMMISSION_FACTOR) { ;; change commission factor in financial
         if (commission_factor != -1) {
+            throw_unless(ERROR::INVALID_COMMISSION_FACTOR, commission_factor <= COMMISSION_BASE);
             throw_unless(ERROR::UPDATE_DELAY_HAS_NOT_PASSED_YET, now() - changing_commission_time >= TIME::UPDATE_DELAY);
             send_msg(financial_address, MIN_TON_FOR_CHANGING_FINANCIAL, begin_cell().store_op(FIN_OP::CHANGE_COMMISSION_FACTOR).store_uint(commission_factor, 16).end_cell(), FLAGS::NON_BOUNCEABLE, SEND_MODE::PAY_FEES_SEPARATELY + SEND_MODE::IGNORE_ERRORS);
             commission_factor = -1;
         } else {
             commission_factor = msg_body~load_uint(16);
-            throw_unless(ERROR::INVALID_COMMISSION_FACTOR,  commission_factor <= COMMISSION_BASE);
+            throw_unless(ERROR::INVALID_COMMISSION_FACTOR,  commission_factor < COMMISSION_BASE);
             changing_commission_time = now();
         }
     } elseif (op == OP::CANCEL_CHANGING_COMMISSION_FACTOR) { ;; cancel changing commission factor in financial
