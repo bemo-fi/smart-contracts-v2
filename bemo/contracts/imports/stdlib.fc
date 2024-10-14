@@ -769,7 +769,7 @@ const int MSG_BODY_IN_REF = 1;
 
 const int MSG_ONLY_BODY_SIZE = MSG_INFO_REST_BITS + 1 + 1;
 
-builder store_statinit_ref_and_body_ref(builder b, cell state_init, cell body) inline {
+builder store_stateinit_ref_and_body_ref(builder b, cell state_init, cell body) inline {
     return b
     .store_uint(MSG_HAVE_STATE_INIT + MSG_STATE_INIT_IN_REF + MSG_BODY_IN_REF, MSG_WITH_STATE_INIT_AND_BODY_SIZE)
     .store_ref(state_init)

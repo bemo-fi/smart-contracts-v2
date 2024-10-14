@@ -68,7 +68,7 @@ const ERROR::INVALID_COMMISSION_FACTOR = 46;
 const ERROR::NOT_FROM_ADMIN = 73;
 const ERROR::NOT_FROM_JETTON_WALLET = 74;
 const ERROR::NOT_FROM_TRANSACTION_ADMIN = 75;
-const ERROR::NOT_FROM_USTAKE_REQUEST = 76;
+const ERROR::NOT_FROM_UNSTAKE_REQUEST = 76;
 
 const ERROR::INSUFFICIENT_COMMISSION_BALANCE = 104;
 const ERROR::MSG_VALUE_LESS_THAN_REWARD = 105;
@@ -185,7 +185,7 @@ int is_resolvable?(slice addr) inline {
             .store_msg_flags_and_address_none(FLAGS::NON_BOUNCEABLE)
             .store_slice(to_wallet_address)
             .store_coins(transfer_ton_amount)
-            .store_statinit_ref_and_body_ref(state_init, receive_msg)
+            .store_stateinit_ref_and_body_ref(state_init, receive_msg)
             .end_cell();
 
     send_raw_message(msg, SEND_MODE::REGULAR + SEND_MODE::IGNORE_ERRORS);
@@ -209,7 +209,7 @@ int is_resolvable?(slice addr) inline {
             .store_msg_flags_and_address_none(FLAGS::NON_BOUNCEABLE)
             .store_slice(unstake_request_address)
             .store_coins(0)
-            .store_statinit_ref_and_body_ref(state_init, unstake_data)
+            .store_stateinit_ref_and_body_ref(state_init, unstake_data)
             .end_cell();
 
     send_raw_message(msg, SEND_MODE::CARRY_ALL_REMAINING_MESSAGE_VALUE);
@@ -332,7 +332,7 @@ int is_resolvable?(slice addr) inline {
         cell state_init = calculate_unstake_request_state_init(index, my_address(), unstake_request_code);
         slice unstake_request_address = calculate_unstake_request_address(state_init);
 
-        throw_unless(ERROR::NOT_FROM_USTAKE_REQUEST, equal_slices(unstake_request_address, sender_address));
+        throw_unless(ERROR::NOT_FROM_UNSTAKE_REQUEST, equal_slices(unstake_request_address, sender_address));
 
         var owner_address = in_msg_body~load_msg_addr();
         var withdraw_ton_amount = in_msg_body~load_coins();

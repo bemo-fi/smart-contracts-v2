@@ -183,7 +183,7 @@ int is_resolvable?(slice addr) inline {
     .store_msg_flags_and_address_none(FLAGS::BOUNCEABLE)
     .store_slice(to_wallet_address)
     .store_coins(transfer_ton_amount)
-    .store_statinit_ref_and_body_ref(state_init, receive_msg)
+    .store_stateinit_ref_and_body_ref(state_init, receive_msg)
     .end_cell();
 
     send_raw_message(msg, SEND_MODE::REGULAR + SEND_MODE::IGNORE_ERRORS);
@@ -207,7 +207,7 @@ int is_resolvable?(slice addr) inline {
     .store_msg_flags_and_address_none(FLAGS::NON_BOUNCEABLE)
     .store_slice(unstake_request_address)
     .store_coins(0)
-    .store_statinit_ref_and_body_ref(state_init, unstake_data)
+    .store_stateinit_ref_and_body_ref(state_init, unstake_data)
     .end_cell();
 
     send_raw_message(msg, SEND_MODE::CARRY_ALL_REMAINING_MESSAGE_VALUE);
