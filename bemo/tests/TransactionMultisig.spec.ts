@@ -8,6 +8,7 @@ import {getReturnTonPayload, getSendTonFromFinancialPayload} from "../wrappers/u
 import {NominatorPoolCodeBase64} from "../wrappers/NominatorPool";
 import {NominatorProxy} from "../wrappers/NominatorProxy";
 import {mnemonicNew, mnemonicToPrivateKey, KeyPair} from "@ton/crypto";
+import { FinancialOpcodes } from '../wrappers/Financial';
 
 describe('TransactionMultisig', () => {
 
@@ -301,9 +302,9 @@ describe('TransactionMultisig', () => {
 
         const result1 = await multisig.sendOrder(sendTonOrder, keypairs[0].secretKey, 0)
 
-        const body1 = beginCell().storeUint(70, 32).storeAddress(proxy1.address).storeCoins(toNano(10000)).storeMaybeRef(null).endCell()
-        const body2 = beginCell().storeUint(70, 32).storeAddress(proxy2.address).storeCoins(toNano(10000)).storeMaybeRef(null).endCell()
-        const body3 = beginCell().storeUint(70, 32).storeAddress(proxy3.address).storeCoins(toNano(10000)).storeMaybeRef(null).endCell()
+        const body1 = beginCell().storeUint(FinancialOpcodes.sendTon, 32).storeAddress(proxy1.address).storeCoins(toNano(10000)).storeMaybeRef(null).endCell()
+        const body2 = beginCell().storeUint(FinancialOpcodes.sendTon, 32).storeAddress(proxy2.address).storeCoins(toNano(10000)).storeMaybeRef(null).endCell()
+        const body3 = beginCell().storeUint(FinancialOpcodes.sendTon, 32).storeAddress(proxy3.address).storeCoins(toNano(10000)).storeMaybeRef(null).endCell()
 
         expect(result1.transactions.length).toBe(4)
         expect(result1.transactions).toHaveTransaction({

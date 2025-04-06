@@ -22,12 +22,12 @@ const ACTION::WITHDRAW = 119; ;; "w" - withdraw request
 
 ;; ops
 const OP::SIMPLE_TRANSFER = 0;
-const OP::RETURN_TON_TO_FINANCIAL = 1;
-const OP::ACCEPT_TON = 2;
+const OP::RETURN_TON_TO_FINANCIAL = 0x2b155d89;
+const OP::ACCEPT_TON = 0x3f77f5e9;
 
 ;; financial ops
-const FIN_OP::ACCEPT_REWARD = 1;
-const FIN_OP::ACCEPT_TON = 9;
+const FIN_OP::ACCEPT_REWARD = 0x4353307d;
+const FIN_OP::ACCEPT_TON = 0x73273971;
 
 ;; errors
 const ERROR::UNKNOWN_ACTION = 202;

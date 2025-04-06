@@ -2,8 +2,8 @@ import {Address, beginCell, Cell, toNano} from "@ton/core";
 
 
 export const TransactionMultisigOpcodes = {
-    deposit: 0,
-    returnTon: 9
+    deposit: 0x7d9d71fe,
+    returnTon: 0x243d1d70
 }
 
 export function getSendTonFromFinancialPayload(

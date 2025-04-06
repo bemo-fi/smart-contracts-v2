@@ -12,11 +12,11 @@ const MIN_TON_FOR_SEND_MSG = 10000000; ;; 0.01 TON
 const MIN_TON_FOR_STORAGE = 200000000; ;; 0.2 TON
 
 ;; ops
-const OP::DEPOSIT = 0;
-const OP::RETURN_TON = 9;
+const OP::DEPOSIT = 0x7d9d71fe;
+const OP::RETURN_TON = 0x243d1d70;
 
 ;; financial ops
-const FIN_OP::SEND_TON_FROM_FINANCIAL = 70;
+const FIN_OP::SEND_TON_FROM_FINANCIAL = 0x13f22452;
 
 ;; time
 const TIME::MAX_DELAY_FOR_QUERY_ID = 24 * 60 * 60; ;; 24h

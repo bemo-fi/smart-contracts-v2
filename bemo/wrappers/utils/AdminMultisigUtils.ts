@@ -2,21 +2,21 @@ import {Address, beginCell, Cell, toNano} from "@ton/core";
 import {buildJettonOnchainMetadata, JettonMetadata} from "./ContentUtils";
 
 export const AdminMultisigOpcodes = {
-    changeAdminMultisig: 100,
-    cancelChangingAdminMultisig: 101,
-    changeTransactionMultisig: 200,
-    cancelChangingTransactionMultisig: 201,
-    changeContent: 300,
-    cancelChangingContent: 301,
-    changeCommissionFactor: 400,
-    cancelChangingCommissionFactor: 401,
-    changeCommissionAddress: 500,
-    cancelChangingCommissionAddress: 501,
-    changeFinancialCode: 600,
-    cancelChangingFinancialCode: 601,
-    sendCommission: 7,
-    transferJetton: 8,
-    returnTon: 9
+    changeAdminMultisig: 0x1345e3e,
+    cancelChangingAdminMultisig: 0x69dd9cb,
+    changeTransactionMultisig: 0x5fb0ba98,
+    cancelChangingTransactionMultisig: 0x75f23ec3,
+    changeContent: 0x34d22003,
+    cancelChangingContent: 0x47a4e755,
+    changeCommissionFactor: 0x7ea2bdae,
+    cancelChangingCommissionFactor: 0x2357a2f4,
+    changeCommissionAddress: 0x65cecbcc,
+    cancelChangingCommissionAddress: 0x69fc24e6,
+    changeFinancialCode: 0x60ef7f7b,
+    cancelChangingFinancialCode: 0x3f21bfc,
+    sendCommission: 0x43deb294,
+    transferJetton: 0x384a37da,
+    returnTon: 0x54fa365
 }
 
 
@@ -24,7 +24,7 @@ export function getAdminMultisigInternalPayload(payload: Cell, walletId: number 
     const time = BigInt(Math.floor(Date.now() / 1000 + queryOffset));
     const queryId = time << 32n;
 
-    return  beginCell()
+    return beginCell()
         .storeUint(walletId, 32)
         .storeUint(queryId, 64)
         .storeRef(payload)

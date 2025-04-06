@@ -1,9 +1,10 @@
 import {Blockchain, SandboxContract, TreasuryContract} from '@ton/sandbox'
 import {Address, beginCell, Cell, fromNano, toNano} from '@ton/core'
-import {NominatorProxy, NominatorProxyErrors} from '../wrappers/NominatorProxy'
+import {NominatorProxy, NominatorProxyErrors, NominatorProxyOpcodes} from '../wrappers/NominatorProxy'
 import '@ton/test-utils'
 import {compile} from '@ton/blueprint'
 import {NominatorPool} from "../wrappers/NominatorPool";
+import { FinancialOpcodes } from '../wrappers/Financial'
 
 describe('NominatorProxy', () => {
     let code: Cell
@@ -100,7 +101,7 @@ describe('NominatorProxy', () => {
             value: (x) => {
                 return x! > toNano(10001)
             },
-            body: beginCell().storeUint(0xFFFFFFFF, 32).storeUint(0, 32).storeUint(100, 8).endCell(),
+            body: beginCell().storeUint(0xFFFFFFFF, 32).storeUint(NominatorProxyOpcodes.receiveTon, 32).storeUint(100, 8).endCell(),
             exitCode: NominatorProxyErrors.noErrors,
             success: true
         })
@@ -111,7 +112,7 @@ describe('NominatorProxy', () => {
             value: (x) => {
                 return x! >= toNano(10001)
             },
-            body: beginCell().storeUint(9, 32).endCell(),
+            body: beginCell().storeUint(FinancialOpcodes.acceptTon, 32).endCell(),
             exitCode: NominatorProxyErrors.noErrors,
             success: true
         })
@@ -724,7 +725,7 @@ describe('NominatorProxy', () => {
             body: (x: Cell | undefined) => {
                 const op = x!.beginParse().loadUint(32)
                 const reward = x!.beginParse().skip(32).loadCoins()
-                return op == 1 && 0 < reward && reward <= tonAmount
+                return op == FinancialOpcodes.receiveTonWithReward && FinancialOpcodes.mint < reward && reward <= tonAmount
             },
             success: true
         })
@@ -777,7 +778,7 @@ describe('NominatorProxy', () => {
             value: (x) => {
                 return x! <= tonAmount
             },
-            body: beginCell().storeUint(1, 32).storeCoins(0).endCell(),
+            body: beginCell().storeUint(FinancialOpcodes.receiveTonWithReward, 32).storeCoins(0).endCell(),
             success: true
         })
 
@@ -821,7 +822,7 @@ describe('NominatorProxy', () => {
             value: (x) => {
                 return x! <= tonAmount
             },
-            body: beginCell().storeUint(9, 32).endCell(),
+            body: beginCell().storeUint(FinancialOpcodes.acceptTon, 32).endCell(),
             success: true
         })
 

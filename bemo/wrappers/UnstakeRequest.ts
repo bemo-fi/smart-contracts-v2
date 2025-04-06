@@ -32,8 +32,8 @@ export const UnstakeRequestErrors = {
 }
 
 export const UnstakeRequestOpCodes = {
-    deploy: 100,
-    return: 101
+    deploy: 0x10a1ce75,
+    return: 0x38633538
 }
 
 export function unstakeRequestConfigToCell(config: UnstakeRequestConfig): Cell {

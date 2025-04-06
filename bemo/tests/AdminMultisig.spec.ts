@@ -316,7 +316,7 @@ describe('AdminMultisig', () => {
         expect(result2.transactions).toHaveTransaction({
             from: multisig.address,
             to: financial.address,
-            body: beginCell().storeUint(2, 32).storeAddress(newAdmin.address).endCell(),
+            body: beginCell().storeUint(FinancialOpcodes.changeAdmin, 32).storeAddress(newAdmin.address).endCell(),
             success: true,
         })
 
@@ -642,7 +642,7 @@ describe('AdminMultisig', () => {
         expect(result.transactions).toHaveTransaction({
             from: multisig.address,
             to: financial.address,
-            body: beginCell().storeUint(2, 32).storeAddress(newAdmin.address).endCell(),
+            body: beginCell().storeUint(FinancialOpcodes.changeAdmin, 32).storeAddress(newAdmin.address).endCell(),
             exitCode: AdminMultisigErrors.noErrors
         })
 
@@ -755,7 +755,7 @@ describe('AdminMultisig', () => {
         expect(result.transactions).toHaveTransaction({
             from: multisig.address,
             to: financial.address,
-            body: beginCell().storeUint(3, 32).storeAddress(newAdmin.address).endCell(),
+            body: beginCell().storeUint(FinancialOpcodes.changeTransactionAdmin, 32).storeAddress(newAdmin.address).endCell(),
             exitCode: AdminMultisigErrors.noErrors
         })
 
@@ -896,7 +896,7 @@ describe('AdminMultisig', () => {
         expect(result.transactions).toHaveTransaction({
             from: multisig.address,
             to: financial.address,
-            body: beginCell().storeUint(4, 32).storeRef(buildJettonOnchainMetadata(content)).endCell(),
+            body: beginCell().storeUint(FinancialOpcodes.changeContent, 32).storeRef(buildJettonOnchainMetadata(content)).endCell(),
             exitCode: AdminMultisigErrors.noErrors
         })
 
@@ -1053,7 +1053,7 @@ describe('AdminMultisig', () => {
         expect(result.transactions).toHaveTransaction({
             from: multisig.address,
             to: financial.address,
-            body: beginCell().storeUint(5, 32).storeUint(commissionFactor, 16).endCell(),
+            body: beginCell().storeUint(FinancialOpcodes.changeCommissionFactor, 32).storeUint(commissionFactor, 16).endCell(),
             exitCode: AdminMultisigErrors.noErrors
         })
 
@@ -1170,7 +1170,7 @@ describe('AdminMultisig', () => {
         expect(result.transactions).toHaveTransaction({
             from: multisig.address,
             to: financial.address,
-            body: beginCell().storeUint(6, 32).storeAddress(commissionWallet.address).endCell(),
+            body: beginCell().storeUint(FinancialOpcodes.changeCommissionAddress, 32).storeAddress(commissionWallet.address).endCell(),
             exitCode: AdminMultisigErrors.noErrors
         })
 
@@ -1285,7 +1285,7 @@ describe('AdminMultisig', () => {
         expect(result.transactions).toHaveTransaction({
             from: multisig.address,
             to: financial.address,
-            body: beginCell().storeUint(5000, 32).storeRef(newCode).endCell(),
+            body: beginCell().storeUint(FinancialOpcodes.updateCode, 32).storeRef(newCode).endCell(),
             exitCode: AdminMultisigErrors.noErrors
         })
 
@@ -1347,7 +1347,7 @@ describe('AdminMultisig', () => {
         expect(result.transactions).toHaveTransaction({
             from: multisig.address,
             to: financial.address,
-            body: beginCell().storeUint(80, 32).endCell(),
+            body: beginCell().storeUint(FinancialOpcodes.sendCommission, 32).endCell(),
             value: toNano('0.01'),
             exitCode: AdminMultisigErrors.noErrors
         })

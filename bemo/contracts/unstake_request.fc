@@ -9,11 +9,11 @@
 ;; =============== consts =============================
 
 ;; ops
-const OP::DEPLOY_UNSTAKE_REQUEST = 100;
-const OP::RETURN_UNSTAKE_REQUEST = 101;
+const OP::DEPLOY_UNSTAKE_REQUEST = 0x10a1ce75;
+const OP::RETURN_UNSTAKE_REQUEST = 0x38633538;
 
 ;; financial ops
-const FIN_OP::UNSTAKE = 10;
+const FIN_OP::UNSTAKE = 0x492ab1b3;
 
 ;; errors
 const ERROR::NOT_ALLOWED = 50;

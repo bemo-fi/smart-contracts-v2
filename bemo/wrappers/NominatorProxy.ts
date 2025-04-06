@@ -40,8 +40,8 @@ export function nominatorProxyConfigToCell(config: NominatorProxyConfig): Cell {
 
 export const NominatorProxyOpcodes = {
     receiveTon: 0,
-    sendTonToFinancial: 1,
-    acceptTon: 2
+    sendTonToFinancial: 0x2b155d89,
+    acceptTon: 0x3f77f5e9
 }
 
 export const NominatorProxyErrors = {
