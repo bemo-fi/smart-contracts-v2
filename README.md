@@ -14,3 +14,5 @@ After the request is sent to the financial s-c. That in turn sends the assets to
 # Validation withdrawals.
 ![272541252-966089aa-793c-4d17-b0e6-7691f72c61b7.png](272541252-966089aa-793c-4d17-b0e6-7691f72c61b7.png)
     You can send a withdrawal request 10 hours after the nominator-proxy has sent the money for validation. This is enough time for the round to start and finish. Anyone can request a withdrawal. This is done for decentralization, so the assets cannot be locked to the nominator. When the round is over and the assets return to the pool, Mytonctrl software will make a withdrawal to the nominator-proxy. It will in turn send the assets to the financial s-c along with the validation reward data. The financial s-c will change the internal Ton pools, and then the rate will increase.
+
+You can read the technical documentation for smart contracts [here](https://github.com/bemo-fi/smart-contracts-v2-docs) and stake TON [here](https://app.bemo.fi/).
