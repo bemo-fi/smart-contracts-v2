@@ -300,7 +300,7 @@ int is_resolvable?(slice addr) inline {
         in_msg_body~skip_query_id();
         int withdraw_jetton_amount = in_msg_body~load_coins();
         slice owner_address = in_msg_body~load_msg_addr();
-        slice receiver_address = in_msg_body~load_msg_addr();
+        slice receiver_address = in_msg_body~load_msg_addr(); ;; currently unused
         cell forward_payload = in_msg_body~load_maybe_ref();
         in_msg_body.end_parse();
         throw_unless(ERROR::NOT_FROM_JETTON_WALLET,
@@ -322,7 +322,7 @@ int is_resolvable?(slice addr) inline {
 
         save_data();
 
-        deploy_unstake_request(next_unstake_request_index - 1, receiver_address, withdraw_ton_amount, withdraw_jetton_amount, unlock_timestamp, forward_payload);
+        deploy_unstake_request(next_unstake_request_index - 1, owner_address, withdraw_ton_amount, withdraw_jetton_amount, unlock_timestamp, forward_payload);
 
         return ();
     }
