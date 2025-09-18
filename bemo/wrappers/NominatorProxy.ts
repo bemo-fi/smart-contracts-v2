@@ -4,11 +4,12 @@ import {
     Cell,
     Contract,
     contractAddress,
-    ContractProvider, fromNano,
+    ContractProvider,
+    fromNano,
     Sender,
     SendMode,
-    toNano
-} from "@ton/core";
+    toNano,
+} from '@ton/core';
 
 export type NominatorProxyConfig = {
     walletId?: number;
@@ -17,8 +18,8 @@ export type NominatorProxyConfig = {
     nominatorPoolAddress: string;
     depositTime?: number;
     withdrawnTime?: number;
-    lastWithdrawAddress?: string
-}
+    lastWithdrawAddress?: string;
+};
 
 export function nominatorProxyConfigToCell(config: NominatorProxyConfig): Cell {
     let cell = beginCell()
@@ -27,22 +28,28 @@ export function nominatorProxyConfigToCell(config: NominatorProxyConfig): Cell {
         .storeAddress(Address.parse(config.financialAddress))
         .storeAddress(Address.parse(config.nominatorPoolAddress))
         .storeUint(config.depositTime ?? 0, 64)
-        .storeUint(config.withdrawnTime ?? 0, 64)
+        .storeUint(config.withdrawnTime ?? 0, 64);
 
-    if(config.lastWithdrawAddress != null){
-        cell.storeAddress(Address.parse(config.lastWithdrawAddress))
+    if (config.lastWithdrawAddress != null) {
+        cell.storeAddress(Address.parse(config.lastWithdrawAddress));
     } else {
-        cell.storeSlice(beginCell().storeUint(0, 2).endCell().beginParse())
+        cell.storeSlice(beginCell().storeUint(0, 2).endCell().beginParse());
     }
 
-    return cell.endCell()
+    return cell.endCell();
 }
 
 export const NominatorProxyOpcodes = {
     receiveTon: 0,
     sendTonToFinancial: 0x2b155d89,
-    acceptTon: 0x3f77f5e9
-}
+    acceptTon: 0x3f77f5e9,
+};
+
+export const TonPoolOpcodes = {
+    deposit: 0x64, // d
+    withdraw: 0x77, // w
+    acceptDeposit: 2577928699,
+};
 
 export const NominatorProxyErrors = {
     noErrors: 0,
@@ -56,66 +63,58 @@ export const NominatorProxyErrors = {
     withdrawTimeHasNotYetCome: 206,
     depositHasAlreadyBeenMade: 207,
     unknownOp: 0xffff,
-}
+};
 
 export class NominatorProxy implements Contract {
     constructor(
         readonly address: Address,
-        readonly init?: { code: Cell, data: Cell },
+        readonly init?: { code: Cell; data: Cell },
     ) {}
 
     static createFromAddress(address: Address) {
-        return new NominatorProxy(address)
+        return new NominatorProxy(address);
     }
 
     static createFromConfig(config: NominatorProxyConfig, code: Cell, workchain = 0) {
-        const data = nominatorProxyConfigToCell(config)
-        const init = { code, data }
-        return new NominatorProxy(contractAddress(workchain, init), init)
+        const data = nominatorProxyConfigToCell(config);
+        const init = { code, data };
+        return new NominatorProxy(contractAddress(workchain, init), init);
     }
 
     async sendDeploy(provider: ContractProvider, via: Sender, value: bigint) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell()
-                .storeUint(NominatorProxyOpcodes.acceptTon,32)
-                .endCell(),
-        })
+            body: beginCell().storeUint(NominatorProxyOpcodes.acceptTon, 32).endCell(),
+        });
     }
 
     async sendTonToNominatorProxy(provider: ContractProvider, via: Sender, value: bigint) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell()
-                .storeUint(NominatorProxyOpcodes.receiveTon,32)
-                .endCell(),
-        })
+            body: beginCell().storeUint(NominatorProxyOpcodes.receiveTon, 32).endCell(),
+        });
     }
 
     async sendTonToFinancial(provider: ContractProvider, via: Sender, value: bigint) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell()
-                .storeUint(NominatorProxyOpcodes.sendTonToFinancial,32)
-                .endCell(),
-        })
+            body: beginCell().storeUint(NominatorProxyOpcodes.sendTonToFinancial, 32).endCell(),
+        });
     }
 
     async sendTon(provider: ContractProvider, via: Sender, value: bigint) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell()
-                .storeUint(2,32)
-                .endCell(),
-        })
+            body: beginCell().storeUint(2, 32).endCell(),
+        });
     }
 
-    async getProxyData(provider: ContractProvider): Promise<NominatorProxyConfig>{
-        const result = await provider.get('get_proxy_data', [])
+    async getProxyData(provider: ContractProvider): Promise<NominatorProxyConfig> {
+        const result = await provider.get('get_proxy_data', []);
 
         return {
             walletId: result.stack.readNumber(),
@@ -124,7 +123,7 @@ export class NominatorProxy implements Contract {
             nominatorPoolAddress: result.stack.readAddress().toString(),
             depositTime: result.stack.readNumber(),
             withdrawnTime: result.stack.readNumber(),
-            lastWithdrawAddress: result.stack.readAddressOpt()?.toString()
-        }
+            lastWithdrawAddress: result.stack.readAddressOpt()?.toString(),
+        };
     }
 }
